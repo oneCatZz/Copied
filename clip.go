@@ -1,0 +1,219 @@
+package main
+
+import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
+	"image"
+	"image/png"
+	"net/url"
+	"path/filepath"
+	"regexp"
+	"slices"
+	"strings"
+	"time"
+
+	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/transfer"
+	"golang.org/x/image/draw"
+)
+
+// Kind is what a clip holds.
+type Kind string
+
+const (
+	KindText  Kind = "text"
+	KindLink  Kind = "link"
+	KindColor Kind = "color"
+	KindImage Kind = "image"
+	KindFiles Kind = "files"
+)
+
+// Clip is one entry of the clipboard history. The list keeps a preview of
+// it: Text is cut short and Data, the full PNG of an image, stays in the
+// database until the clip is pasted.
+type Clip struct {
+	ID     int64
+	Kind   Kind
+	Text   string // the text, or the paths of files, one per line
+	HTML   string
+	Data   []byte // the PNG of an image
+	Thumb  []byte // a small PNG of it, for the card
+	Width  int    // of an image, in pixels
+	Height int
+	Length int // of the whole text, in characters
+	Hash   string
+	Pinned bool
+	UsedAt time.Time
+}
+
+// Files returns the paths of a clip of files.
+func (c *Clip) Files() []string {
+	if c.Kind != KindFiles || c.Text == "" {
+		return nil
+	}
+	return strings.Split(c.Text, "\n")
+}
+
+const thumbSize = 520 // pixels, the longer side of a card's picture
+
+var colorPattern = regexp.MustCompile(`^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$`)
+
+// Formats by which password managers mark what should not be recorded.
+var concealedFormats = []string{
+	"org.nspasteboard.ConcealedType",
+	"org.nspasteboard.TransientType",
+	"com.agilebits.onepassword",
+	"ExcludeClipboardContentFromMonitorProcessing",
+	"Clipboard Viewer Ignore",
+}
+
+// readClipboard makes a clip of what is on the clipboard, or returns nil
+// when there is nothing to keep. It reads files first, then text, then a
+// picture: a spreadsheet's cells come with a picture of them, but are text.
+func readClipboard() *Clip {
+	for _, f := range mygo.Clipboard.AvailableFormats() {
+		for _, concealed := range concealedFormats {
+			if strings.EqualFold(f, concealed) {
+				return nil
+			}
+		}
+	}
+	formats := mygo.Clipboard.Formats()
+	if slices.Contains(formats, transfer.FileList) || slices.Contains(formats, transfer.URIList) {
+		if files, err := mygo.Clipboard.ReadFiles(); err == nil && len(files) > 0 {
+			text := strings.Join(files, "\n")
+			return &Clip{Kind: KindFiles, Text: text, Length: len(files), Hash: hashOf(KindFiles, []byte(text))}
+		}
+	}
+	if text := mygo.Clipboard.ReadText(); strings.TrimSpace(text) != "" {
+		c := &Clip{Kind: textKind(text), Text: text, Length: len([]rune(text))}
+		if slices.Contains(formats, transfer.HTML) {
+			c.HTML = mygo.Clipboard.ReadHTML()
+		}
+		// Links and colors are the same clip however they were copied.
+		c.Hash = hashOf(KindText, []byte(text))
+		return c
+	}
+	if slices.Contains(formats, transfer.PNG) {
+		if data := mygo.Clipboard.ReadImage(); len(data) > 0 {
+			return imageClip(data)
+		}
+	}
+	return nil
+}
+
+func textKind(text string) Kind {
+	s := strings.TrimSpace(text)
+	if colorPattern.MatchString(s) {
+		return KindColor
+	}
+	if !strings.ContainsAny(s, " \t\r\n") {
+		if u, err := url.Parse(s); err == nil && u.Host != "" && (u.Scheme == "http" || u.Scheme == "https") {
+			return KindLink
+		}
+	}
+	return KindText
+}
+
+func imageClip(data []byte) *Clip {
+	img, err := png.Decode(bytes.NewReader(data))
+	if err != nil {
+		return nil
+	}
+	b := img.Bounds()
+	c := &Clip{Kind: KindImage, Data: data, Width: b.Dx(), Height: b.Dy(), Hash: hashOf(KindImage, data)}
+	c.Thumb = data
+	if longer := max(b.Dx(), b.Dy()); longer > thumbSize {
+		w, h := b.Dx()*thumbSize/longer, b.Dy()*thumbSize/longer
+		small := image.NewRGBA(image.Rect(0, 0, max(w, 1), max(h, 1)))
+		draw.ApproxBiLinear.Scale(small, small.Bounds(), img, b, draw.Src, nil)
+		var buf bytes.Buffer
+		if png.Encode(&buf, small) == nil {
+			c.Thumb = buf.Bytes()
+		}
+	}
+	return c
+}
+
+func hashOf(kind Kind, data []byte) string {
+	h := sha256.New()
+	h.Write([]byte(kind))
+	h.Write([]byte{0})
+	h.Write(data)
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+// writeClipboard puts a whole clip (see Store.Get) on the clipboard. Plain
+// leaves out the formatting of text.
+func writeClipboard(c *Clip, plain bool) error {
+	switch c.Kind {
+	case KindImage:
+		return mygo.Clipboard.WriteImage(c.Data)
+	case KindFiles:
+		return mygo.Clipboard.WriteFiles(c.Files()...)
+	}
+	reps := []transfer.Representation{transfer.Bytes(transfer.Text, []byte(c.Text))}
+	if c.HTML != "" && !plain {
+		reps = append(reps, transfer.Bytes(transfer.HTML, []byte(c.HTML)))
+	}
+	return mygo.Clipboard.Write(transfer.New(transfer.NewItem(reps...)))
+}
+
+// detail is the line a card's footer shows.
+func (c *Clip) detail() string {
+	switch c.Kind {
+	case KindImage:
+		return fmt.Sprintf("%d × %d", c.Width, c.Height)
+	case KindFiles:
+		return fmt.Sprintf("%d 个文件", c.Length)
+	case KindLink:
+		if u, err := url.Parse(strings.TrimSpace(c.Text)); err == nil {
+			return u.Host
+		}
+	case KindColor:
+		return "颜色"
+	}
+	return fmt.Sprintf("%d 个字符", c.Length)
+}
+
+func kindLabel(k Kind) string {
+	switch k {
+	case KindLink:
+		return "链接"
+	case KindColor:
+		return "颜色"
+	case KindImage:
+		return "图片"
+	case KindFiles:
+		return "文件"
+	}
+	return "文本"
+}
+
+// ago says how long ago t was, shortly.
+func ago(t time.Time) string {
+	d := time.Since(t)
+	switch {
+	case d < time.Minute:
+		return "刚刚"
+	case d < time.Hour:
+		return fmt.Sprintf("%d 分钟前", int(d.Minutes()))
+	case d < 24*time.Hour:
+		return fmt.Sprintf("%d 小时前", int(d.Hours()))
+	case d < 48*time.Hour:
+		return "昨天"
+	case d < 30*24*time.Hour:
+		return fmt.Sprintf("%d 天前", int(d.Hours()/24))
+	}
+	return t.Format("2006-01-02")
+}
+
+func baseNames(paths []string) []string {
+	names := make([]string, len(paths))
+	for i, p := range paths {
+		names[i] = filepath.Base(p)
+	}
+	return names
+}
