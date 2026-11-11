@@ -60,6 +60,9 @@ type app struct {
 	input    ui.Handle
 	thumbs   map[int64]*thumb // the pictures of the image clips in view, by clip
 
+	stripScroll      ui.ScrollState
+	stripWheelTarget float32 // pending travel from consecutive wheel notches
+
 	target   uintptr      // the window the panel was shown over (Windows)
 	paused   atomic.Bool  // the watcher records nothing
 	ownUntil atomic.Int64 // Unix milliseconds, see ownWrite

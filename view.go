@@ -217,16 +217,39 @@ func (a *app) strip(c *ui.Context) {
 	// What a card asks for changes the clips, so it waits for them all to
 	// be built.
 	var action func()
-	ui.ScrollHorizontal(c.Key("strip")).Grow(1).Padding(18, 22, 20, 22).Gap(14).AlignItems(ui.Stretch).Children(func() {
-		for i, clip := range a.clips {
-			if act := a.card(c, i, clip); act != nil {
-				action = act
+	ui.ScrollHorizontal(c.Key("strip")).TrackScroll(&a.stripScroll).HandleInput(a.scrollStrip).
+		Grow(1).Padding(18, 22, 20, 22).Gap(14).AlignItems(ui.Stretch).Children(func() {
+			for i, clip := range a.clips {
+				if act := a.card(c, i, clip); act != nil {
+					action = act
+				}
 			}
-		}
-	})
+		})
 	if action != nil {
 		action()
 	}
+}
+
+// scrollStrip turns a vertical wheel sideways. Precise gestures and native
+// horizontal input keep the platform's direction, momentum and axis handling.
+func (a *app) scrollStrip(ev ui.InputEvent) bool {
+	if ev.Kind != ui.InputScroll || ev.Precise || ev.DX != 0 || ev.DY == 0 || ev.Mods&ui.Shift != 0 {
+		return false
+	}
+	s := &a.stripScroll
+	from := s.X
+	if s.Scrolling() && (ev.DY > 0) == (a.stripWheelTarget > s.X) {
+		from = a.stripWheelTarget
+	}
+	target := max(0, min(from+ev.DY, s.MaxX))
+	if target == s.X && !s.Scrolling() {
+		return false
+	}
+	// Accumulate repeated notches, but reverse from the current position so
+	// unfinished travel does not swallow a change of direction at an edge.
+	a.stripWheelTarget = target
+	s.ScrollTo(target, 0, ui.Animation{Duration: 150 * time.Millisecond, Ease: ui.EaseOut})
+	return true
 }
 
 // card shows a clip, and returns what the user asked of it, if anything.
