@@ -100,9 +100,6 @@ var (
 	}
 	// Hovers and selections fade.
 	fadeMotion = ui.ElementTransition{Colors: true, Shadows: true, Duration: 140 * time.Millisecond}
-	// The fill of a filter and its text fade in step.
-	chipFade   = ui.Animation{Duration: 180 * time.Millisecond}
-	chipMotion = ui.ElementTransition{Colors: true, Animation: &chipFade}
 )
 
 // The panel's content rises as the panel shows, and its cards after it,
@@ -112,7 +109,6 @@ const (
 	cardRise    = 380 * time.Millisecond
 	cardStagger = 32 * time.Millisecond
 	cardsRising = 12 // the cards after them are out of sight, or nearly
-	entranceEnd = riseTime + cardRise + cardsRising*cardStagger
 )
 
 // rise is how far along something that takes d is, after since: from 0 to

@@ -22,10 +22,11 @@ import (
 var defaultShortcuts = []string{"CmdOrCtrl+Shift+V", "Alt+Shift+V", "CmdOrCtrl+Alt+Shift+V"}
 
 const (
-	panelHeight = 372 // DIPs
-	panelMargin = 12  // around the panel, in the work area
-	pollEvery   = 400 * time.Millisecond
-	ownWrite    = time.Second // the watcher ignores the clipboard so long after the app wrote it
+	panelHeight    = 372 // DIPs
+	panelMargin    = 12  // around the panel, in the work area
+	pollEvery      = 400 * time.Millisecond
+	ownWrite       = time.Second // the watcher ignores the clipboard so long after the app wrote it
+	panelIdleDelay = 2 * time.Second
 )
 
 // app holds what the panel shows. It is read and changed on the main
@@ -51,6 +52,8 @@ type app struct {
 	recording    bool          // the dialog waits for the keys of a new shortcut
 	recordError  string
 	quitting     bool // the app quits: the panel closes rather than hides
+	panelIdle    *time.Timer
+	panelEpoch   uint64
 
 	clips    []*Clip
 	filter   Filter
@@ -59,6 +62,11 @@ type app struct {
 	scrollTo bool // the chosen card scrolls into view in the next frame
 	input    ui.Handle
 	thumbs   map[int64]*thumb // the pictures of the image clips in view, by clip
+
+	filterFlow filterFlow
+	thumbSlots chan struct{} // bounds background thumbnail reads and decoding
+	thumbClock uint64
+	thumbLimit int
 
 	stripScroll      ui.ScrollState
 	stripWheelTarget float32 // pending travel from consecutive wheel notches
@@ -81,8 +89,9 @@ func (a *app) reload() {
 	for _, c := range clips {
 		listed[c.ID] = true
 	}
-	for id := range a.thumbs {
+	for id, th := range a.thumbs {
 		if !listed[id] {
+			th.cancel()
 			delete(a.thumbs, id)
 		}
 	}
@@ -93,7 +102,9 @@ func (a *app) choose(i int) {
 	a.scrollTo = true
 }
 
-func (a *app) setFilter(f Filter) {
+func (a *app) setFilter(f Filter, now time.Time) {
+	left, right, _ := a.filterFlow.edges(now)
+	a.filterFlow = filterFlow{left: left, right: right, target: float32(f) * filterChipStride, started: now}
 	a.filter = f
 	a.chosen = 0
 	a.scrollTo = true
@@ -199,9 +210,11 @@ func (a *app) watch() {
 			log.Print("recording a clip: ", err)
 			continue
 		}
-		if a.panel.IsVisible() {
-			a.panel.Update(a.reload)
-		}
+		mygo.RunOnMain(func() {
+			if a.panel != nil && a.panel.IsVisible() {
+				a.panel.Update(a.reload)
+			}
+		})
 		if clip = nil; large {
 			debug.FreeOSMemory() // a picture decoded takes many times its file
 		}
@@ -211,6 +224,10 @@ func (a *app) watch() {
 // show shows the panel along the bottom of the display with the pointer,
 // with the whole history and the newest clip chosen.
 func (a *app) show() {
+	a.cancelPanelRelease()
+	if a.panel == nil || a.panel.IsDestroyed() {
+		a.newPanel()
+	}
 	target := frontWindow()
 	if a.trayFlyout != nil {
 		target = a.trayTarget
@@ -222,6 +239,7 @@ func (a *app) show() {
 	a.panel.SetSize(width, panelHeight)
 	a.panel.SetPosition(d.WorkArea.X+panelMargin, d.WorkArea.Y+d.WorkArea.Height-panelHeight-panelMargin)
 	a.query, a.filter, a.chosen, a.scrollTo = "", FilterAll, 0, true
+	a.filterFlow = filterFlow{}
 	a.shownAt = time.Now()
 	a.reload()
 	a.input.Focus()
@@ -244,7 +262,33 @@ func (a *app) ready() {
 		return
 	}
 	a.thumbs = map[int64]*thumb{}
-	a.panel = mygo.NewWindow(mygo.WindowOptions{
+	a.thumbSlots = make(chan struct{}, 2)
+	a.newPanel()
+	mygo.App.OnBeforeQuit(func(*mygo.QuitEvent) {
+		a.quitting = true
+		a.cancelPanelRelease()
+	})
+
+	a.settings = loadSettings()
+	a.registerShortcut()
+	a.setUpTray()
+	mygo.App.OnWillQuit(func(*mygo.QuitEvent) {
+		a.clearThumbs()
+		if a.tray != nil {
+			a.tray.Destroy()
+		}
+		a.store.Close()
+	})
+	go a.watch()
+	if !mygo.App.WasOpenedAtLogin() {
+		a.show() // started by the user: show what it does
+	} else {
+		a.panelHidden(a.panel)
+	}
+}
+
+func (a *app) newPanel() {
+	panel := mygo.NewWindow(mygo.WindowOptions{
 		Title:         "Copied",
 		Panel:         true,
 		Hidden:        true,
@@ -257,42 +301,51 @@ func (a *app) ready() {
 		DisableResize: true,
 		Content:       ui.View(a.view),
 	})
-	// Hide rather than close, on Escape, Cmd-W or Alt-F4, and when the user
-	// goes elsewhere: the panel shows again at once. Quitting destroys it.
+	a.panel = panel
+	// Hide on Escape, Cmd-W or Alt-F4, and when the user goes elsewhere.
+	// A short grace period keeps quick reopenings warm. Quitting destroys it.
 	// Quit asks every window to close, and a close prevented cancels it.
-	a.panel.OnClose(func(e *mygo.CloseEvent) {
+	panel.OnClose(func(e *mygo.CloseEvent) {
 		if a.quitting {
 			return
 		}
 		e.PreventDefault()
-		a.panel.Hide()
+		panel.Hide()
 	})
-	mygo.App.OnBeforeQuit(func(*mygo.QuitEvent) { a.quitting = true })
-	a.panel.OnBlur(a.panel.Hide)
-	a.panel.OnHide(func() {
-		if a.recording {
-			a.stopRecording("")
-		}
-		a.settingsOpen = false
-		// A hidden panel keeps nothing: it lists the clips again as it
-		// shows, and their pictures go back to the system meanwhile.
-		a.clips, a.thumbs = nil, map[int64]*thumb{}
-		go debug.FreeOSMemory()
-	})
+	panel.OnBlur(panel.Hide)
+	panel.OnHide(func() { a.panelHidden(panel) })
+}
 
-	a.settings = loadSettings()
-	a.registerShortcut()
-	a.setUpTray()
-	mygo.App.OnWillQuit(func(*mygo.QuitEvent) {
-		if a.tray != nil {
-			a.tray.Destroy()
-		}
-		a.store.Close()
-	})
-	go a.watch()
-	if !mygo.App.WasOpenedAtLogin() {
-		a.show() // started by the user: show what it does
+func (a *app) cancelPanelRelease() {
+	a.panelEpoch++
+	if a.panelIdle != nil {
+		a.panelIdle.Stop()
+		a.panelIdle = nil
 	}
+}
+
+func (a *app) panelHidden(panel *mygo.Window) {
+	if a.panel != panel {
+		return
+	}
+	if a.recording {
+		a.stopRecording("")
+	}
+	a.settingsOpen = false
+	a.clips = nil
+	a.clearThumbs()
+	a.cancelPanelRelease()
+	epoch := a.panelEpoch
+	a.panelIdle = time.AfterFunc(panelIdleDelay, func() {
+		mygo.RunOnMain(func() {
+			if a.panelEpoch == epoch && a.panel == panel && !panel.IsVisible() && !a.quitting {
+				a.panelIdle = nil
+				panel.Destroy() // Release the UI runtime and its GPU caches too.
+				go debug.FreeOSMemory()
+			}
+		})
+	})
+	go debug.FreeOSMemory()
 }
 
 // registerShortcut registers the shortcut the user chose, or the first
@@ -420,10 +473,12 @@ func (a *app) updateTrayMenu() {
 }
 
 // trayIconPNG keeps the app's colored tile in the Windows notification area.
+//
 //go:embed resources/tray.png
 var trayIconPNG []byte
 
 // trayTemplatePNG lets macOS tint the outline to match its menu bar.
+//
 //go:embed resources/tray-template.png
 var trayTemplatePNG []byte
 

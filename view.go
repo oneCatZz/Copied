@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"runtime"
@@ -10,7 +11,14 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-const cardWidth = 240 // DIPs
+const (
+	cardWidth = 240 // DIPs
+	cardGap   = 14
+)
+
+// A placeholder must not inherit the full card's transition snapshot, which
+// can retain the image even after its application cache entry is evicted.
+type cardPlaceholder int64
 
 var digitKeys = []ui.Key{ui.Key1, ui.Key2, ui.Key3, ui.Key4, ui.Key5, ui.Key6, ui.Key7, ui.Key8, ui.Key9}
 
@@ -76,7 +84,14 @@ func (a *app) view(c *ui.Context) {
 	}
 
 	// The entrance draws frames until it is over.
-	a.since = time.Since(a.shownAt)
+	a.since = c.Now().Sub(a.shownAt)
+	entranceEnd := riseTime
+	if count := min(len(a.clips), cardsRising); count > 0 {
+		entranceEnd = max(entranceEnd, riseTime/3+time.Duration(count-1)*cardStagger+cardRise)
+	}
+	if c.Preferences().ReduceMotion {
+		a.since = entranceEnd
+	}
 	if a.since < entranceEnd {
 		c.Invalidate()
 	}
@@ -151,30 +166,7 @@ func (a *app) header(c *ui.Context) {
 			}
 		})
 
-		ui.Row(c).Gap(2).AlignItems(ui.Center).Children(func() {
-			for i, label := range filterLabels {
-				selected := a.filter == Filter(i)
-				chip := ui.Row(c.Key(label)).Height(28).PaddingX(12).AlignItems(ui.Center).Radius(14).
-					Cursor(ui.CursorPointer)
-				// The fill and the text fade together, from one filter to
-				// the next.
-				fill, color := t.Accent.Alpha(0), t.TextMuted
-				switch {
-				case selected:
-					fill, color = t.Accent, t.AccentText
-				case chip.Hovered():
-					fill, color = t.SurfaceHover, t.Text
-				}
-				if chip.Clicked() && !selected {
-					a.setFilter(Filter(i))
-					a.input.Focus()
-				}
-				color = chip.AnimateColor("text", color, chipFade)
-				chip.Background(fill).Transition(chipMotion).Children(func() {
-					ui.Text(c, label).FontSize(12).FontWeight(550).TextColor(color)
-				})
-			}
-		})
+		a.filters(c)
 
 		ui.Spacer(c)
 		if a.paused.Load() {
@@ -217,14 +209,47 @@ func (a *app) strip(c *ui.Context) {
 	// What a card asks for changes the clips, so it waits for them all to
 	// be built.
 	var action func()
-	ui.ScrollHorizontal(c.Key("strip")).TrackScroll(&a.stripScroll).HandleInput(a.scrollStrip).
-		Grow(1).Padding(18, 22, 20, 22).Gap(14).AlignItems(ui.Stretch).Children(func() {
-			for i, clip := range a.clips {
-				if act := a.card(c, i, clip); act != nil {
-					action = act
-				}
+	width, _ := c.Size()
+	const stride = cardWidth + cardGap
+	const overscan = 2 * stride
+	left, right := a.stripScroll.X-overscan, a.stripScroll.X+width+overscan
+	chosenX := float32(a.chosen * stride)
+	buildCard := func(i int) bool {
+		x := float32(i * stride)
+		near := x+cardWidth >= left && x <= right
+		reveal := a.scrollTo && x+cardWidth >= chosenX-width-overscan && x <= chosenX+width+overscan
+		return i == a.chosen || near || reveal
+	}
+	// Protect the entire current window before loading anything, so an LRU
+	// insertion cannot evict another card that this frame is about to show.
+	for _, th := range a.thumbs {
+		th.pinned = false
+	}
+	required := 0
+	for i, clip := range a.clips {
+		if clip.Kind == KindImage && buildCard(i) {
+			required++
+			if th := a.thumbs[clip.ID]; th != nil {
+				th.pinned = true
 			}
-		})
+		}
+	}
+	a.thumbLimit = max(thumbCacheLimit, required)
+	a.trimThumbs()
+	ui.ScrollHorizontal(c.Key("strip")).TrackScroll(&a.stripScroll).HandleInput(a.scrollStrip).
+		Grow(1).Padding(18, 22, 20, 22).Gap(cardGap).AlignItems(ui.Stretch).Children(func() {
+		for i, clip := range a.clips {
+			if !buildCard(i) {
+				// Keep geometry and identity, without text layout, shadows
+				// or image work for distant cards.
+				ui.Box(c.Key(cardPlaceholder(clip.ID))).Width(cardWidth).Shrink(0)
+				continue
+			}
+			if act := a.card(c, i, clip); act != nil {
+				action = act
+			}
+		}
+	})
 	if action != nil {
 		action()
 	}
@@ -263,7 +288,9 @@ func (a *app) card(c *ui.Context, i int, clip *Clip) (action func()) {
 		depth = 0.5
 	}
 
-	card := ui.Column(c.Key(clip.ID)).Width(cardWidth).Shrink(0).Radius(16).Clip().
+	// Previews clip their own contents inside the card's padding. Clipping
+	// this animated rounded ancestor too creates redundant retained masks.
+	card := ui.Column(c.Key(clip.ID)).Width(cardWidth).Shrink(0).Radius(16).
 		Background(t.Surface).Cursor(ui.CursorPointer).Label(kindLabel(clip.Kind))
 	lift := float32(0)
 	switch {
@@ -278,7 +305,8 @@ func (a *app) card(c *ui.Context, i int, clip *Clip) (action func()) {
 		card.Border(1, t.Border).Shadow(0, 1, 2, 0, shade.Alpha(depth/4))
 	}
 	// The card rises to its lift, and from below as the panel shows.
-	y := -card.AnimateTo("lift", lift, ui.Snappy)
+	card.AnimatePose(ui.Pose{Y: -lift}, ui.Snappy)
+	y := float32(0)
 	if i < cardsRising {
 		e := rise(a.since-riseTime/3-time.Duration(i)*cardStagger, cardRise)
 		if e < 1 {
@@ -349,10 +377,11 @@ func (a *app) preview(c *ui.Context, i int, clip *Clip, hue ui.Color) {
 	case KindImage:
 		// Pictures are read as their cards come near the view.
 		box := ui.Box(c).Grow(1).Basis(0).Margin(0, 12).Radius(10).Clip().Background(t.SurfaceHover)
-		near := i < cardsRising || box.InViewMargin(2*cardWidth)
 		box.Children(func() {
-			if picture := a.thumb(clip, near); picture != nil {
-				ui.Image(c, picture).Fill().Fit(ui.Cover)
+			th := a.thumb(clip)
+			if th.bitmap != nil {
+				image := ui.Image(c, th.bitmap).Fill().Fit(ui.Cover)
+				th.releasePixels(c, image)
 			}
 		})
 	case KindColor:
@@ -394,30 +423,106 @@ func (a *app) preview(c *ui.Context, i int, clip *Clip, hue ui.Color) {
 	}
 }
 
+const thumbCacheLimit = 24
+
 // thumb is the picture of an image clip, on the GPU alone once it showed.
 type thumb struct {
-	bitmap *ui.Bitmap // nil where the picture does not decode
-	frames int        // it was built in
+	cancel context.CancelFunc
+
+	bitmap           *ui.Bitmap // nil where the picture does not decode
+	used             uint64
+	pinned           bool
+	pixelsReleased   bool
+	releaseScheduled bool
 }
 
-// thumb returns the picture of an image clip, read and decoded the first
-// time its card is near the view, and kept while the panel shows.
-func (a *app) thumb(clip *Clip, near bool) *ui.Bitmap {
+// thumb queues a picture once it is near the view. Only the UI thread
+// publishes or paints bitmaps; workers own them until Update hands them over.
+func (a *app) thumb(clip *Clip) *thumb {
 	th, ok := a.thumbs[clip.ID]
 	if !ok {
-		if !near {
-			return nil
-		}
-		th = &thumb{}
-		th.bitmap, _ = ui.DecodeBitmap(a.store.Thumb(clip.ID))
+		ctx, cancel := context.WithCancel(context.Background())
+		th = &thumb{cancel: cancel}
 		a.thumbs[clip.ID] = th
+		id, store, panel, slots := clip.ID, a.store, a.panel, a.thumbSlots
+		go func() {
+			defer cancel()
+			bitmap, err := loadThumb(ctx, store, id, slots)
+			if err != nil {
+				return
+			}
+			panel.Update(func() {
+				if a.thumbs[id] == th {
+					th.bitmap = bitmap
+				}
+			})
+		}()
 	}
-	if th.bitmap != nil {
-		if th.frames++; th.frames == 4 {
-			th.bitmap.ReleasePixels()
+	a.thumbClock++
+	th.used, th.pinned = a.thumbClock, true
+	a.trimThumbs()
+	return th
+}
+
+// InView refers to a committed frame, so the image was already painted.
+// One timed build handles a settled image even when later frames only paint.
+func (th *thumb) releasePixels(c *ui.Context, image ui.Element) {
+	if th.pixelsReleased {
+		return
+	}
+	if image.InView() {
+		th.bitmap.ReleasePixels()
+		th.pixelsReleased = true
+	} else if !th.releaseScheduled {
+		th.releaseScheduled = true
+		c.After(32 * time.Millisecond)
+	}
+}
+
+func (a *app) trimThumbs() {
+	for len(a.thumbs) > max(thumbCacheLimit, a.thumbLimit) {
+		var oldest *thumb
+		var oldestID int64
+		for id, th := range a.thumbs {
+			if !th.pinned && (oldest == nil || th.used < oldest.used) {
+				oldest, oldestID = th, id
+			}
 		}
+		if oldest == nil {
+			return
+		}
+		oldest.cancel()
+		delete(a.thumbs, oldestID)
 	}
-	return th.bitmap
+}
+
+func loadThumb(ctx context.Context, store *Store, id int64, slots chan struct{}) (*ui.Bitmap, error) {
+	select {
+	case slots <- struct{}{}:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	defer func() { <-slots }()
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	data := store.Thumb(id)
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	bitmap, err := ui.DecodeBitmap(data)
+	if err == nil {
+		err = ctx.Err()
+	}
+	return bitmap, err
+}
+
+func (a *app) clearThumbs() {
+	for _, th := range a.thumbs {
+		th.cancel()
+	}
+	a.thumbs = map[int64]*thumb{}
+	a.thumbClock = 0
 }
 
 // keycap draws a key, as on a keyboard.

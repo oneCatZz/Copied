@@ -39,8 +39,12 @@ func openStore() (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
+	return openStoreAt(filepath.Join(dir, "history.db"))
+}
+
+func openStoreAt(path string) (*Store, error) {
 	ctx := context.Background()
-	db, err := sqlite.Open(ctx, filepath.Join(dir, "history.db"), sqlite.OpenOptions{})
+	db, err := sqlite.Open(ctx, path, sqlite.OpenOptions{})
 	if err != nil {
 		return nil, err
 	}

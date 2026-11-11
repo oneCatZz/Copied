@@ -1,0 +1,52 @@
+name: Build Copied
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows x64
+            runner: windows-latest
+            platform: windows/amd64
+            artifact: Copied-windows-amd64
+            path: build/windows-amd64/
+          - name: macOS Universal
+            runner: macos-latest
+            platform: darwin/universal
+            artifact: Copied-macos-universal
+            path: build/darwin-universal/*.dmg
+    env:
+      CGO_ENABLED: "0"
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Test
+        run: go test -count=1 ./...
+      - name: Check MyGo UI lifetimes
+        run: go tool mygo vet .
+      - name: Package
+        run: go tool mygo build -platform ${{ matrix.platform }}
+      - name: Upload packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.path }}
+          if-no-files-found: error
+          retention-days: 14
