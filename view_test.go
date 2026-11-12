@@ -1,9 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"image"
+	"image/color"
+	"image/png"
 	"math"
 	"runtime"
 	"testing"
@@ -163,6 +167,61 @@ func TestPanelRendering(t *testing.T) {
 	tt.SetDark(true)
 	tt.Advance(time.Second)
 	saveUIArtifact(t, tt, "panel-dark")
+}
+
+func TestClearHistoryBeforePanelCreation(t *testing.T) {
+	s := testStore(t)
+	if err := s.Add(&Clip{Kind: KindText, Text: "background clip", Hash: "background-clip"}); err != nil {
+		t.Fatal(err)
+	}
+	a := &app{store: s}
+	a.clearHistory()
+	clips, err := s.List(FilterAll, "")
+	if err != nil || len(clips) != 0 || a.panel != nil {
+		t.Fatalf("background clear: error=%v, clips=%d, panel=%v", err, len(clips), a.panel)
+	}
+}
+
+func TestPreviewKeepsRoundedImageAndBoundsCode(t *testing.T) {
+	pixels := image.NewRGBA(image.Rect(0, 0, 40, 40))
+	for y := 0; y < 40; y++ {
+		for x := 0; x < 40; x++ {
+			pixels.SetRGBA(x, y, color.RGBA{R: 240, A: 255})
+		}
+	}
+	var data bytes.Buffer
+	if err := png.Encode(&data, pixels); err != nil {
+		t.Fatal(err)
+	}
+	bitmap, err := ui.DecodeBitmap(data.Bytes())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, kind := range []Kind{KindImage, KindCode} {
+		t.Run(string(kind), func(t *testing.T) {
+			a := &app{thumbs: map[int64]*thumb{1: {bitmap: bitmap, cancel: func() {}}}}
+			clip := &Clip{ID: 1, Kind: kind, Text: "func main() {\n\tfmt.Println(\"a long line that must stay inside the code preview\")\n}\n"}
+			tt := ui.NewTester(func(c *ui.Context) {
+				ui.Themed(c, lightTheme).Column().Fill().Background(ui.RGB(255, 255, 255)).Children(func() {
+					a.preview(c, 0, clip, kindColor(kind, false))
+				})
+			}, 240, 160)
+			img := tt.Image()
+			for _, point := range []image.Point{{13, 1}, {13, 158}, {5, 80}, {235, 80}} {
+				r, g, b, _ := img.At(point.X, point.Y).RGBA()
+				if r != 65535 || g != 65535 || b != 65535 {
+					t.Fatalf("preview escaped its bounds at %v: %v", point, img.At(point.X, point.Y))
+				}
+			}
+			if kind == KindImage {
+				r, g, _, _ := img.At(120, 80).RGBA()
+				if r < 50000 || g > 1000 {
+					t.Fatal("image preview did not fill its surface")
+				}
+			}
+			saveUIArtifact(t, tt, "preview-"+string(kind))
+		})
+	}
 }
 
 func TestThumbnailLRUEvictsOldEntriesAndCancelsJobs(t *testing.T) {

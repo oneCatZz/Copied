@@ -61,5 +61,22 @@
   "shortcutUnset": "Not set. Click to record.",
   "shortcutUnavailable": "That shortcut is in use. Try another one.",
   "language": "Language",
-  "followSystem": "Follow system"
+  "followSystem": "Follow system",
+  "groups": "Groups",
+  "typeFilter": "Type: {name}",
+  "moreGroups": "More groups and actions",
+  "newGroup": "New group",
+  "renameGroup": "Rename group",
+  "deleteGroup": "Delete group",
+  "groupName": "Group name",
+  "groupNameHint": "Choose a name up to 20 characters.",
+  "groupNameInvalid": "Enter a name of 1–20 characters on one line.",
+  "groupNameExists": "A group with this name already exists.",
+  "groupFailed": "Could not update the group. Try again.",
+  "addToGroups": "Add to groups",
+  "groupMembershipHint": "Choose one or more groups. Grouped items are kept when history is cleared.",
+  "deleteGroupHint": "Only the group will be removed. Its clipboard items stay in history.",
+  "keepGrouped": "Keep grouped items",
+  "cancel": "Cancel",
+  "save": "Save"
 }

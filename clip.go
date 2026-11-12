@@ -49,7 +49,9 @@ type Clip struct {
 	Hash   string
 	Pinned bool
 	UsedAt time.Time
-	code   *codePreview // bounded, lazily highlighted preview; never persisted
+
+	GroupIDs []int64
+	code     *codePreview // bounded, lazily highlighted preview; never persisted
 }
 
 // Files returns the paths of a clip of files.

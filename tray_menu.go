@@ -26,7 +26,7 @@ func (a *app) toggleTrayMenu() {
 		return
 	}
 	a.trayTarget = frontWindow()
-	if a.panel.IsVisible() {
+	if a.panel != nil && a.panel.IsVisible() {
 		a.trayTarget = a.target
 		a.panel.Hide()
 	}
@@ -104,7 +104,7 @@ func (a *app) trayMenuView(c *ui.Context) {
 		})
 		trayDivider(c)
 
-		trayAction(c, "clear", trayTrash, tx.ClearHistory(), tx.KeepFavorites(), t.TextMuted, a.clearHistory)
+		trayAction(c, "clear", trayTrash, tx.ClearHistory(), tx.KeepGrouped(), t.TextMuted, a.clearHistory)
 		if a.trayError != "" {
 			ui.Text(c, locales.Catalog.Format(c.Locale(), a.trayError, nil)).FontSize(11).TextColor(t.Danger).Padding(4, 10).SingleLine()
 		}
@@ -195,7 +195,7 @@ func (a *app) clearHistory() {
 		return
 	}
 	a.closeTrayMenu()
-	if a.panel.IsVisible() {
+	if a.panel != nil && a.panel.IsVisible() {
 		a.reload()
 		a.panel.Invalidate()
 	}

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -64,6 +65,16 @@ func openStoreAt(path string) (*Store, error) {
 			used_at INTEGER NOT NULL
 		)`,
 		`CREATE INDEX IF NOT EXISTS clips_used_at ON clips (used_at DESC)`,
+		`CREATE TABLE IF NOT EXISTS history_groups (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			name TEXT NOT NULL COLLATE NOCASE UNIQUE
+		)`,
+		`CREATE TABLE IF NOT EXISTS clip_groups (
+			clip_id INTEGER NOT NULL REFERENCES clips(id) ON DELETE CASCADE,
+			group_id INTEGER NOT NULL REFERENCES history_groups(id) ON DELETE CASCADE,
+			PRIMARY KEY (clip_id, group_id)
+		)`,
+		`CREATE INDEX IF NOT EXISTS clip_groups_group ON clip_groups (group_id, clip_id)`,
 	} {
 		if _, err := db.Execute(ctx, sql); err != nil {
 			db.Close()
@@ -72,6 +83,10 @@ func openStoreAt(path string) (*Store, error) {
 	}
 	s := &Store{db}
 	if err := s.migrateCodeClips(ctx); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if err := s.migrateGroups(ctx); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -129,14 +144,17 @@ func (s *Store) Add(c *Clip) error {
 	if err != nil {
 		return err
 	}
-	_, err = s.db.Execute(ctx, `DELETE FROM clips WHERE pinned = 0 AND id NOT IN (
-		SELECT id FROM clips WHERE pinned = 0 ORDER BY used_at DESC LIMIT ?)`, historyLimit)
+	_, err = s.db.Execute(ctx, `DELETE FROM clips WHERE pinned = 0
+		AND NOT EXISTS (SELECT 1 FROM clip_groups WHERE clip_id = clips.id) AND id NOT IN (
+		SELECT id FROM clips WHERE pinned = 0
+		AND NOT EXISTS (SELECT 1 FROM clip_groups WHERE clip_id = clips.id)
+		ORDER BY used_at DESC LIMIT ?)`, historyLimit)
 	return err
 }
 
 // List returns the newest clips matching a filter and the text searched
 // for, with a preview of each: the start of its text; Thumb reads its picture.
-func (s *Store) List(filter Filter, query string) ([]*Clip, error) {
+func (s *Store) List(filter Filter, query string, groupID ...int64) ([]*Clip, error) {
 	where, args := []string{"1 = 1"}, []any{previewRunes}
 	switch filter {
 	case FilterText:
@@ -152,13 +170,18 @@ func (s *Store) List(filter Filter, query string) ([]*Clip, error) {
 	case FilterPinned:
 		where = append(where, "pinned = 1")
 	}
+	if len(groupID) > 0 && groupID[0] != 0 {
+		where = append(where, "EXISTS (SELECT 1 FROM clip_groups WHERE clip_id = clips.id AND group_id = ?)")
+		args = append(args, groupID[0])
+	}
 	if q := strings.TrimSpace(query); q != "" {
 		where = append(where, `text LIKE ? ESCAPE '\'`)
 		q = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(q)
 		args = append(args, "%"+q+"%")
 	}
 	args = append(args, listLimit)
-	rows, err := s.db.Query(context.Background(), `SELECT id, kind, substr(text, 1, ?), width, height, length, pinned, used_at
+	rows, err := s.db.Query(context.Background(), `SELECT id, kind, substr(text, 1, ?), width, height, length, pinned, used_at,
+		(SELECT group_concat(group_id) FROM clip_groups WHERE clip_id = clips.id)
 		FROM clips WHERE `+strings.Join(where, " AND ")+` ORDER BY used_at DESC LIMIT ?`, args...)
 	if err != nil {
 		return nil, err
@@ -174,6 +197,11 @@ func (s *Store) List(filter Filter, query string) ([]*Clip, error) {
 			Length: int(integer(v[5])),
 			Pinned: integer(v[6]) != 0,
 			UsedAt: time.UnixMilli(integer(v[7])),
+		}
+		for _, value := range strings.Split(str(v[8]), ",") {
+			if id, err := strconv.ParseInt(value, 10, 64); err == nil {
+				c.GroupIDs = append(c.GroupIDs, id)
+			}
 		}
 		clips = append(clips, c)
 	}
@@ -210,12 +238,7 @@ func (s *Store) Touch(id int64) error {
 }
 
 func (s *Store) SetPinned(id int64, pinned bool) error {
-	flag := 0
-	if pinned {
-		flag = 1
-	}
-	_, err := s.db.Execute(context.Background(), `UPDATE clips SET pinned = ? WHERE id = ?`, flag, id)
-	return err
+	return s.SetGroupMember(id, defaultGroupID, pinned)
 }
 
 func (s *Store) Delete(id int64) error {
@@ -223,9 +246,10 @@ func (s *Store) Delete(id int64) error {
 	return err
 }
 
-// Clear removes the history, but for the pinned clips.
+// Clear keeps every clip organized into a group, including legacy favorites.
 func (s *Store) Clear() error {
-	_, err := s.db.Execute(context.Background(), `DELETE FROM clips WHERE pinned = 0`)
+	_, err := s.db.Execute(context.Background(), `DELETE FROM clips WHERE pinned = 0
+		AND NOT EXISTS (SELECT 1 FROM clip_groups WHERE clip_id = clips.id)`)
 	return err
 }
 

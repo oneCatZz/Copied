@@ -653,3 +653,173 @@ func FollowSystem() string { return In(i18n.Locale()).FollowSystem() }
 func (msgs Messages) FollowSystem() string {
 	return Catalog.Format(msgs.locale, "followSystem", nil)
 }
+
+// Groups says "Groups"
+// in the language the app shows.
+func Groups() string { return In(i18n.Locale()).Groups() }
+
+// Groups says "Groups"
+// in the language of msgs.
+func (msgs Messages) Groups() string {
+	return Catalog.Format(msgs.locale, "groups", nil)
+}
+
+// TypeFilter says "Type: {name}"
+// in the language the app shows.
+func TypeFilter(name string) string { return In(i18n.Locale()).TypeFilter(name) }
+
+// TypeFilter says "Type: {name}"
+// in the language of msgs.
+func (msgs Messages) TypeFilter(name string) string {
+	return Catalog.Format(msgs.locale, "typeFilter", map[string]any{"name": name})
+}
+
+// MoreGroups says "More groups and actions"
+// in the language the app shows.
+func MoreGroups() string { return In(i18n.Locale()).MoreGroups() }
+
+// MoreGroups says "More groups and actions"
+// in the language of msgs.
+func (msgs Messages) MoreGroups() string {
+	return Catalog.Format(msgs.locale, "moreGroups", nil)
+}
+
+// NewGroup says "New group"
+// in the language the app shows.
+func NewGroup() string { return In(i18n.Locale()).NewGroup() }
+
+// NewGroup says "New group"
+// in the language of msgs.
+func (msgs Messages) NewGroup() string {
+	return Catalog.Format(msgs.locale, "newGroup", nil)
+}
+
+// RenameGroup says "Rename group"
+// in the language the app shows.
+func RenameGroup() string { return In(i18n.Locale()).RenameGroup() }
+
+// RenameGroup says "Rename group"
+// in the language of msgs.
+func (msgs Messages) RenameGroup() string {
+	return Catalog.Format(msgs.locale, "renameGroup", nil)
+}
+
+// DeleteGroup says "Delete group"
+// in the language the app shows.
+func DeleteGroup() string { return In(i18n.Locale()).DeleteGroup() }
+
+// DeleteGroup says "Delete group"
+// in the language of msgs.
+func (msgs Messages) DeleteGroup() string {
+	return Catalog.Format(msgs.locale, "deleteGroup", nil)
+}
+
+// GroupName says "Group name"
+// in the language the app shows.
+func GroupName() string { return In(i18n.Locale()).GroupName() }
+
+// GroupName says "Group name"
+// in the language of msgs.
+func (msgs Messages) GroupName() string {
+	return Catalog.Format(msgs.locale, "groupName", nil)
+}
+
+// GroupNameHint says "Choose a name up to 20 characters."
+// in the language the app shows.
+func GroupNameHint() string { return In(i18n.Locale()).GroupNameHint() }
+
+// GroupNameHint says "Choose a name up to 20 characters."
+// in the language of msgs.
+func (msgs Messages) GroupNameHint() string {
+	return Catalog.Format(msgs.locale, "groupNameHint", nil)
+}
+
+// GroupNameInvalid says "Enter a name of 1–20 characters on one line."
+// in the language the app shows.
+func GroupNameInvalid() string { return In(i18n.Locale()).GroupNameInvalid() }
+
+// GroupNameInvalid says "Enter a name of 1–20 characters on one line."
+// in the language of msgs.
+func (msgs Messages) GroupNameInvalid() string {
+	return Catalog.Format(msgs.locale, "groupNameInvalid", nil)
+}
+
+// GroupNameExists says "A group with this name already exists."
+// in the language the app shows.
+func GroupNameExists() string { return In(i18n.Locale()).GroupNameExists() }
+
+// GroupNameExists says "A group with this name already exists."
+// in the language of msgs.
+func (msgs Messages) GroupNameExists() string {
+	return Catalog.Format(msgs.locale, "groupNameExists", nil)
+}
+
+// GroupFailed says "Could not update the group. Try again."
+// in the language the app shows.
+func GroupFailed() string { return In(i18n.Locale()).GroupFailed() }
+
+// GroupFailed says "Could not update the group. Try again."
+// in the language of msgs.
+func (msgs Messages) GroupFailed() string {
+	return Catalog.Format(msgs.locale, "groupFailed", nil)
+}
+
+// AddToGroups says "Add to groups"
+// in the language the app shows.
+func AddToGroups() string { return In(i18n.Locale()).AddToGroups() }
+
+// AddToGroups says "Add to groups"
+// in the language of msgs.
+func (msgs Messages) AddToGroups() string {
+	return Catalog.Format(msgs.locale, "addToGroups", nil)
+}
+
+// GroupMembershipHint says "Choose one or more groups. Grouped items are kept when history is cleared."
+// in the language the app shows.
+func GroupMembershipHint() string { return In(i18n.Locale()).GroupMembershipHint() }
+
+// GroupMembershipHint says "Choose one or more groups. Grouped items are kept when history is cleared."
+// in the language of msgs.
+func (msgs Messages) GroupMembershipHint() string {
+	return Catalog.Format(msgs.locale, "groupMembershipHint", nil)
+}
+
+// DeleteGroupHint says "Only the group will be removed. Its clipboard items stay in history."
+// in the language the app shows.
+func DeleteGroupHint() string { return In(i18n.Locale()).DeleteGroupHint() }
+
+// DeleteGroupHint says "Only the group will be removed. Its clipboard items stay in history."
+// in the language of msgs.
+func (msgs Messages) DeleteGroupHint() string {
+	return Catalog.Format(msgs.locale, "deleteGroupHint", nil)
+}
+
+// KeepGrouped says "Keep grouped items"
+// in the language the app shows.
+func KeepGrouped() string { return In(i18n.Locale()).KeepGrouped() }
+
+// KeepGrouped says "Keep grouped items"
+// in the language of msgs.
+func (msgs Messages) KeepGrouped() string {
+	return Catalog.Format(msgs.locale, "keepGrouped", nil)
+}
+
+// Cancel says "Cancel"
+// in the language the app shows.
+func Cancel() string { return In(i18n.Locale()).Cancel() }
+
+// Cancel says "Cancel"
+// in the language of msgs.
+func (msgs Messages) Cancel() string {
+	return Catalog.Format(msgs.locale, "cancel", nil)
+}
+
+// Save says "Save"
+// in the language the app shows.
+func Save() string { return In(i18n.Locale()).Save() }
+
+// Save says "Save"
+// in the language of msgs.
+func (msgs Messages) Save() string {
+	return Catalog.Format(msgs.locale, "save", nil)
+}

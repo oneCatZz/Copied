@@ -61,5 +61,22 @@
   "shortcutUnset": "未设置，点击录制",
   "shortcutUnavailable": "这个快捷键已被占用，换一个试试",
   "language": "语言",
-  "followSystem": "跟随系统"
+  "followSystem": "跟随系统",
+  "groups": "分组",
+  "typeFilter": "类型：{name}",
+  "moreGroups": "更多分组与操作",
+  "newGroup": "新建分组",
+  "renameGroup": "重命名分组",
+  "deleteGroup": "删除分组",
+  "groupName": "分组名称",
+  "groupNameHint": "给分组起个名字，最多 20 个字符。",
+  "groupNameInvalid": "请输入 1–20 个字符的单行名称",
+  "groupNameExists": "已经有同名分组了",
+  "groupFailed": "无法更新分组，请重试",
+  "addToGroups": "添加到分组",
+  "groupMembershipHint": "可加入多个分组，已分组的内容不会被清空历史删除。",
+  "deleteGroupHint": "只移除分组，其中的剪贴板内容仍保留在历史中。",
+  "keepGrouped": "保留分组内容",
+  "cancel": "取消",
+  "save": "保存"
 }

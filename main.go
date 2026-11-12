@@ -67,6 +67,21 @@ type app struct {
 	cardMenuID    int64            // the clip whose context menu is open; zero closes it
 	searchSession uint64           // a fresh input identity dismisses its built-in edit menu
 
+	groups          []Group
+	groupID         int64
+	typeMenuOpen    bool
+	typeHighlight   Filter
+	typeMovePending bool
+	groupMenuOpen   bool
+	groupDialogOpen bool
+	groupMode       string
+	groupEditID     int64
+	groupClipID     int64
+	groupName       string
+	groupError      string
+	groupMembers    map[int64]*bool
+	groupSession    uint64
+
 	filterFlow filterFlow
 	thumbSlots chan struct{} // bounds background thumbnail reads and decoding
 	thumbClock uint64
@@ -82,7 +97,16 @@ type app struct {
 
 // reload lists the clips of the filter and the query again.
 func (a *app) reload() {
-	clips, err := a.store.List(a.filter, a.query)
+	groups, err := a.store.Groups()
+	if err != nil {
+		log.Print("listing groups: ", err)
+		return
+	}
+	a.groups = groups
+	if a.groupID != 0 && !a.hasGroup(a.groupID) {
+		a.groupID = 0
+	}
+	clips, err := a.store.List(a.filter, a.query, a.groupID)
 	if err != nil {
 		log.Print("listing clips: ", err)
 		return
@@ -109,10 +133,9 @@ func (a *app) choose(i int) {
 	a.scrollTo = true
 }
 
-func (a *app) setFilter(f Filter, now time.Time) {
+func (a *app) setFilter(f Filter, _ time.Time) {
 	a.cardMenuID = 0
-	left, right, _ := a.filterFlow.edges(now)
-	a.filterFlow = filterFlow{left: left, right: right, target: float32(f) * filterChipStride, started: now}
+	a.typeMenuOpen = false
 	a.filter = f
 	a.chosen = 0
 	a.scrollTo = true
@@ -249,6 +272,8 @@ func (a *app) show() {
 	a.panel.SetSize(width, panelHeight)
 	a.panel.SetPosition(d.WorkArea.X+panelMargin, d.WorkArea.Y+d.WorkArea.Height-panelHeight-panelMargin)
 	a.query, a.filter, a.chosen, a.scrollTo = "", FilterAll, 0, true
+	a.groupID = 0
+	a.dismissGroupUI()
 	a.filterFlow = filterFlow{}
 	a.shownAt = time.Now()
 	a.reload()
@@ -257,7 +282,7 @@ func (a *app) show() {
 }
 
 func (a *app) toggle() {
-	if a.panel.IsVisible() {
+	if a.panel != nil && a.panel.IsVisible() {
 		a.panel.Hide()
 	} else {
 		a.show()
@@ -275,7 +300,6 @@ func (a *app) ready() {
 	a.thumbSlots = make(chan struct{}, 2)
 	a.settings = loadSettings()
 	a.configureLanguage()
-	a.newPanel()
 	mygo.App.OnBeforeQuit(func(*mygo.QuitEvent) {
 		a.quitting = true
 		a.cancelPanelRelease()
@@ -293,8 +317,6 @@ func (a *app) ready() {
 	go a.watch()
 	if !mygo.App.WasOpenedAtLogin() {
 		a.show() // started by the user: show what it does
-	} else {
-		a.panelHidden(a.panel)
 	}
 }
 
@@ -343,6 +365,7 @@ func (a *app) panelHidden(panel *mygo.Window) {
 		a.stopRecording("")
 	}
 	a.settingsOpen = false
+	a.dismissGroupUI()
 	a.cardMenuID = 0
 	a.searchSession++
 	a.recordError = ""
@@ -428,9 +451,10 @@ func (a *app) saveSettings() {
 
 // openSettings shows the panel with its settings dialog.
 func (a *app) openSettings() {
-	if !a.panel.IsVisible() {
+	if a.panel == nil || !a.panel.IsVisible() {
 		a.show()
 	}
+	a.dismissGroupUI()
 	a.settingsOpen = true
 	a.panel.Invalidate()
 }
@@ -507,7 +531,7 @@ func main() {
 	mygo.App.SetActivationPolicy(mygo.ActivationPolicyAccessory)
 	mygo.App.OnWindowAllClosed(func() {}) // keep running without windows
 	mygo.App.OnSecondInstance(func([]string, string) {
-		if a.panel != nil {
+		if a.store != nil {
 			a.show()
 		}
 	})

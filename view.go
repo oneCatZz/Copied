@@ -35,6 +35,11 @@ func cmdCap() string {
 // key does what a key of the panel does, and reports whether it took it.
 func (a *app) key(mods ui.Modifiers, key ui.Key) bool {
 	switch {
+	case key == ui.KeyTab && (mods == 0 || mods == ui.Shift):
+		if a.settingsOpen || a.groupDialogOpen || a.typeMenuOpen || a.groupMenuOpen || a.cardMenuID != 0 {
+			return false
+		}
+		a.cycleGroup(mods == ui.Shift)
 	case mods == 0 && key == ui.KeyEscape:
 		if a.query == "" {
 			return false // left to the panel, which hides
@@ -54,8 +59,9 @@ func (a *app) key(mods ui.Modifiers, key ui.Key) bool {
 	case mods == ui.Cmd && key == ui.KeyBackspace:
 		a.remove(a.chosen)
 	case mods == ui.Cmd && key == ui.KeyP:
-		a.togglePin(a.chosen)
+		a.openClipGroups(a.chosen)
 	case mods == ui.Cmd && key == ui.KeyComma:
+		a.dismissGroupUI()
 		a.settingsOpen = true
 	default:
 		if mods == ui.Cmd {
@@ -99,12 +105,13 @@ func (a *app) view(c *ui.Context) {
 	}
 
 	// The keys the search field leaves, wherever the focus is.
-	if !a.settingsOpen {
+	if !a.settingsOpen && !a.groupDialogOpen && !a.typeMenuOpen && !a.groupMenuOpen {
 		type combo struct {
 			mods ui.Modifiers
 			key  ui.Key
 		}
 		combos := []combo{
+			{0, ui.KeyTab}, {ui.Shift, ui.KeyTab},
 			{0, ui.KeyLeft}, {0, ui.KeyRight}, {0, ui.KeyEnter}, {ui.Shift, ui.KeyEnter},
 			{ui.Cmd, ui.KeyEnter}, {ui.Cmd, ui.KeyBackspace}, {ui.Cmd, ui.KeyP}, {ui.Cmd, ui.KeyComma},
 		}
@@ -133,6 +140,7 @@ func (a *app) view(c *ui.Context) {
 		a.strip(c)
 		a.footer(c)
 		a.settingsDialog(c)
+		a.groupDialog(c)
 	})
 	a.scrollTo = false
 }
@@ -142,20 +150,35 @@ func (a *app) view(c *ui.Context) {
 func (a *app) header(c *ui.Context) {
 	t := c.Theme()
 	tx := locales.In(c.Locale())
-	ui.Row(c).Padding(18, 22, 6, 22).Gap(16).AlignItems(ui.Center).Children(func() {
-		ui.Row(c).Gap(9).AlignItems(ui.Center).Children(func() {
+	width, _ := c.Size()
+	brandWidth := float32(98)
+	if width < 960 {
+		brandWidth = 24
+	}
+	searchWidth := min(float32(300), max(float32(160), width*0.27))
+	if width < 600 {
+		searchWidth = 120
+	}
+	groupWidth := max(float32(100), width-44-brandWidth-searchWidth-118-30-5*12)
+	if width >= 1100 {
+		groupWidth -= 62
+	}
+	ui.Row(c).Padding(18, 22, 6, 22).Gap(12).AlignItems(ui.Center).Children(func() {
+		ui.Row(c).Width(brandWidth).Shrink(0).Gap(9).AlignItems(ui.Center).Children(func() {
 			ui.Box(c).Size(24, 24).Center().Radius(7).Gradient(t.Accent, kindColor(KindImage, t.Dark), 135).
 				Shadow(0, 4, 10, -2, t.Accent.Alpha(0.5)).Children(func() {
 				ui.Icon(c, iconLogo).FontSize(15).TextColor(ui.RGB(255, 255, 255))
 			})
-			ui.Text(c, "Copied").FontSize(15).FontWeight(650).LetterSpacing(-0.2)
+			if brandWidth > 24 {
+				ui.Text(c, "Copied").FontSize(15).FontWeight(650).LetterSpacing(-0.2)
+			}
 		})
 
 		editTheme := lightEditTheme
 		if t.Dark {
 			editTheme = darkEditTheme
 		}
-		field := ui.Themed(c.Key("search"), editTheme).Row().Width(300).Height(34).PaddingX(11).Gap(8).AlignItems(ui.Center).
+		field := ui.Themed(c.Key("search"), editTheme).Row().Width(searchWidth).Shrink(0).Height(34).PaddingX(11).Gap(8).AlignItems(ui.Center).
 			Radius(10).Background(t.Surface)
 		if a.input.Focused(c) {
 			field.Border(1, t.Accent).Shadow(0, 0, 0, 3, t.Accent.Alpha(0.2))
@@ -167,7 +190,9 @@ func (a *app) header(c *ui.Context) {
 			input := ui.TextInputBase(c.Key(searchInputKey(a.searchSession)), &a.query).Bind(&a.input).Grow(1).FontSize(13).
 				CaretColor(t.Accent).
 				Placeholder(tx.SearchHistory()).Label(tx.Search()).
-				OnTextKey(func(k ui.TextKey) bool { return a.key(k.Mods, k.Key) })
+				OnTextKey(func(k ui.TextKey) bool {
+					return !a.groupDialogOpen && a.key(k.Mods, k.Key)
+				})
 			input.PopoverMenu(func(m *ui.Menu) { m.EditItems() })
 			if input.Changed() {
 				a.chosen, a.scrollTo = 0, true
@@ -175,17 +200,18 @@ func (a *app) header(c *ui.Context) {
 			}
 		})
 
+		a.groupNavigation(c, groupWidth)
 		a.filters(c)
-
-		ui.Spacer(c)
-		if a.paused.Load() {
-			ui.Row(c).Height(22).PaddingX(9).AlignItems(ui.Center).Radius(11).Background(t.Warning.Alpha(0.16)).Children(func() {
-				ui.Text(c, tx.RecordingPaused()).FontSize(11).TextColor(t.Warning)
+		if width >= 1100 {
+			ui.Row(c).Width(50).Gap(5).AlignItems(ui.Center).Children(func() {
+				if a.paused.Load() {
+					ui.Box(c).Size(6, 6).Radius(3).Background(t.Warning).Description(tx.RecordingPaused())
+				}
+				ui.Text(c, tx.ClipCount(len(a.clips))).FontSize(11.5).SingleLine().TextColor(t.TextMuted)
 			})
 		}
-		ui.Text(c, tx.ClipCount(len(a.clips))).FontSize(11.5).TextColor(t.TextMuted)
 
-		gear := ui.Row(c.Key(settingsTipKey(a.searchSession))).Size(30, 30).Center().Radius(9).Cursor(ui.CursorPointer).
+		gear := ui.Row(c.Key(settingsTipKey(a.searchSession))).Size(30, 30).Shrink(0).Center().Radius(9).Cursor(ui.CursorPointer).
 			Label(tx.Settings()).Description(tx.Settings())
 		ui.TooltipBase(c, gear, func(tip ui.Element) {
 			popupSurface(c, tip).Padding(6, 10).Radius(6).Margin(0, 0, 6, 0).
@@ -197,6 +223,7 @@ func (a *app) header(c *ui.Context) {
 			color = t.Text
 		}
 		if gear.Clicked() {
+			a.dismissGroupUI()
 			a.settingsOpen = true
 		}
 		gear.Transition(fadeMotion).Children(func() {
@@ -212,7 +239,7 @@ func (a *app) strip(c *ui.Context) {
 	if len(a.clips) == 0 {
 		ui.Column(c).Grow(1).Center().Gap(6).Children(func() {
 			msg, hint := tx.EmptyHistory(), tx.EmptyHistoryHint()
-			if a.query != "" || a.filter != FilterAll {
+			if a.query != "" || a.filter != FilterAll || a.groupID != 0 {
 				msg, hint = tx.NoMatches(), tx.NoMatchesHint()
 			}
 			ui.Text(c, msg).FontSize(15).FontWeight(600)
@@ -296,7 +323,7 @@ func (a *app) scrollStrip(ev ui.InputEvent) bool {
 
 // card shows a clip, and returns what the user asked of it, if anything.
 func (a *app) card(c *ui.Context, i int, clip *Clip) (action func()) {
-	t := c.Theme()
+	t, tx := c.Theme(), locales.In(c.Locale())
 	selected := i == a.chosen
 	hue := kindColor(clip.Kind, t.Dark)
 	shade := ui.RGB(0, 0, 0)
@@ -353,8 +380,8 @@ func (a *app) card(c *ui.Context, i int, clip *Clip) (action func()) {
 			})
 			ui.Text(c, kindLabel(clip.Kind, c.Locale())).FontSize(12).FontWeight(600)
 			ui.Spacer(c)
-			if clip.Pinned {
-				ui.Icon(c, iconPin).FontSize(12).TextColor(kindColor(KindFiles, t.Dark))
+			if len(clip.GroupIDs) > 0 || clip.Pinned {
+				ui.Icon(c, iconFolder).FontSize(12).TextColor(kindColor(KindFiles, t.Dark)).Description(tx.Groups())
 			}
 			ui.Text(c, ago(clip.UsedAt, c.Locale())).FontSize(11).TextColor(t.TextMuted)
 		})
@@ -378,17 +405,22 @@ func (a *app) preview(c *ui.Context, i int, clip *Clip, hue ui.Color) {
 	switch clip.Kind {
 	case KindCode:
 		ui.Column(c).Grow(1).Basis(0).Margin(0, 12).Padding(10).Radius(10).
-			Background(t.SurfaceHover).Clip().Children(func() {
-				ui.RichText(c, clip.codePreview().styledSpans(t)...).
-					Font("monospace").FontSize(11.5).LineHeight(1.55).NoWrap().MaxLines(8)
+			Background(t.SurfaceHover).Children(func() {
+				// Padding keeps the text inside the rounded surface; a simple
+				// rectangular clip avoids a moving rounded coverage mask.
+				ui.Box(c).Fill().Clip().Children(func() {
+					ui.RichText(c, clip.codePreview().styledSpans(t)...).
+						Font("monospace").FontSize(11.5).LineHeight(1.55).NoWrap().MaxLines(8)
+				})
 			})
 	case KindImage:
 		// Pictures are read as their cards come near the view.
-		box := ui.Box(c).Grow(1).Basis(0).Margin(0, 12).Radius(10).Clip().Background(t.SurfaceHover)
+		box := ui.Box(c).Grow(1).Basis(0).Margin(0, 12).Radius(10).Background(t.SurfaceHover)
 		box.Children(func() {
 			th := a.thumb(clip)
 			if th.bitmap != nil {
-				image := ui.Image(c, th.bitmap).Fill().Fit(ui.Cover)
+				// Image radii are evaluated directly by the GPU image shader.
+				image := ui.Image(c, th.bitmap).Fill().Fit(ui.Cover).Radius(10)
 				th.releasePixels(c, image)
 			}
 		})
@@ -546,6 +578,7 @@ func keycap(c *ui.Context, key string) {
 func (a *app) footer(c *ui.Context) {
 	t := c.Theme()
 	tx := locales.In(c.Locale())
+	width, _ := c.Size()
 	cmd := cmdCap()
 	hints := []struct {
 		keys  []string
@@ -555,7 +588,7 @@ func (a *app) footer(c *ui.Context) {
 		{[]string{"↵"}, tx.Paste()},
 		{[]string{"⇧", "↵"}, tx.PastePlainHint()},
 		{[]string{cmd, "↵"}, tx.CopyOnly()},
-		{[]string{cmd, "P"}, tx.Favorite()},
+		{[]string{cmd, "P"}, tx.AddToGroups()},
 		{[]string{cmd, "⌫"}, tx.Delete()},
 		{[]string{"esc"}, tx.Close()},
 	}
@@ -564,15 +597,18 @@ func (a *app) footer(c *ui.Context) {
 			for _, key := range keys {
 				keycap(c, key)
 			}
-			ui.Text(c, label).FontSize(11).TextColor(t.TextMuted).MarginStart(3)
+			ui.Text(c, label).FontSize(11).TextColor(t.TextMuted).MarginStart(3).SingleLine()
 		})
 	}
 	ui.Row(c).Padding(0, 22, 16, 22).Gap(18).AlignItems(ui.Center).Children(func() {
-		for _, h := range hints {
+		for i, h := range hints {
+			if width < 900 && (i == 2 || i == 3 || i == 5) {
+				continue
+			}
 			hint(h.keys, h.label)
 		}
 		ui.Spacer(c)
-		if a.shortcut != "" {
+		if a.shortcut != "" && width >= 1100 {
 			hint(keycaps(a.shortcut), tx.ShowHide())
 		}
 	})

@@ -79,10 +79,17 @@ func TestBothLanguagesAcrossSurfaces(t *testing.T) {
 			tt := ui.NewTester(a.view, 1200, panelHeight)
 			tt.SetLocale(tag)
 			search, found := tt.AccessByRole(ui.RoleTextField, tx.Search())
-			if !found || search.Placeholder != tx.SearchHistory() || !tt.HasText(tx.Images()) || !tt.HasText(tx.ClipCount(200)) {
+			if !found || search.Placeholder != tx.SearchHistory() || !tt.HasText(tx.TypeFilter(tx.All())) || !tt.HasText(tx.ClipCount(200)) {
 				t.Fatal("panel did not use its window's language")
 			}
 			saveUIArtifact(t, tt, "panel-"+tag)
+			if err := tt.Click(tx.ClipboardTypes()); err != nil {
+				t.Fatal(err)
+			}
+			if !tt.HasText(tx.Images()) || !tt.HasText(tx.Code()) {
+				t.Fatal("type dropdown did not use its window's language")
+			}
+			tt.Key(0, ui.KeyEscape)
 			a.settingsOpen, a.recordError = true, "shortcutUnavailable"
 			tt.Frame()
 			if !tt.HasText(tx.Language()) || !tt.HasText(tx.ShortcutUnavailable()) || !tt.HasText(tx.Done()) {

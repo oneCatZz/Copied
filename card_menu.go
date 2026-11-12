@@ -34,12 +34,12 @@ func (a *app) cardMenu(c *ui.Context, card ui.Element, i int, clip *Clip) (actio
 			action = func() { a.copyOnly(i) }
 		}
 		trayDivider(c)
-		label, ink := tx.Favorite(), t.TextMuted
-		if clip.Pinned {
-			label, ink = tx.Unfavorite(), t.Accent
+		ink := t.TextMuted
+		if len(clip.GroupIDs) > 0 {
+			ink = t.Accent
 		}
-		if menuActionRow(c, m.CheckItem(clip.Pinned), iconPin, label, menuShortcut("CmdOrCtrl+P"), ink).Clicked() {
-			action = func() { a.togglePin(i) }
+		if menuActionRow(c, m.Item(), iconFolder, tx.AddToGroups(), menuShortcut("CmdOrCtrl+P"), ink).Clicked() {
+			action = func() { a.openClipGroups(i) }
 		}
 		trayDivider(c)
 		if menuActionRow(c, m.Item().TextColor(t.Danger), trayTrash, tx.Delete(), menuShortcut("CmdOrCtrl+Backspace"), t.Danger).Clicked() {

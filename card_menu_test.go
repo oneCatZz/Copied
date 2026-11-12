@@ -25,6 +25,7 @@ func cardMenuTester(a *app, dark bool) *ui.Tester {
 					}
 				}
 			})
+			a.groupDialog(c)
 		})
 		if action != nil {
 			action()
@@ -52,6 +53,12 @@ func TestCardMenuActionsTargetTheRightClickedClip(t *testing.T) {
 	if a.cardMenuID != second || a.chosen != 1 {
 		t.Fatal("context menu did not move to the other card")
 	}
+	if err := tt.Click("添加到分组"); err != nil {
+		t.Fatal(err)
+	}
+	if !a.groupDialogOpen || a.groupClipID != second {
+		t.Fatal("group assignment did not target the right-clicked card")
+	}
 	if err := tt.Click("收藏"); err != nil {
 		t.Fatal(err)
 	}
@@ -64,9 +71,12 @@ func TestCardMenuActionsTargetTheRightClickedClip(t *testing.T) {
 			t.Fatal("context menu changed the selected card instead of the right-clicked card")
 		}
 	}
+	if err := tt.Click("完成"); err != nil {
+		t.Fatal(err)
+	}
 	tt.RightClickAt(180, 50)
-	if !tt.HasText("取消收藏") {
-		t.Fatal("favorite context menu state was not refreshed")
+	if !tt.HasText("添加到分组") {
+		t.Fatal("group context menu did not reopen")
 	}
 	tt.Key(0, ui.KeyEnd)
 	tt.Key(0, ui.KeyEnter)

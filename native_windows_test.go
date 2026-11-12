@@ -16,6 +16,8 @@ import (
 	"runtime"
 	"runtime/debug"
 	"runtime/pprof"
+	"slices"
+	"strconv"
 	"syscall"
 	"testing"
 	"time"
@@ -75,9 +77,22 @@ func runNativeTestApp() {
 					clip.Thumb, clip.Width, clip.Height = clip.Data, 520, 320
 				}
 			}
+			if switchRun {
+				switch i % 12 {
+				case 0:
+					clip.Kind, clip.Text = KindCode, "func main() {\n\tfmt.Println(\"performance preview\")\n}\n"
+				case 3:
+					clip.Kind, clip.Text = KindFiles, fmt.Sprintf("C:/native-test/document-%03d.txt", i)
+				}
+			}
 			if err := s.Add(clip); err != nil {
 				panic(err)
 			}
+		}
+		if os.Getenv("COPIED_NATIVE_SEED_ONLY") == "1" {
+			s.Close()
+			mygo.App.Quit()
+			return
 		}
 		a := &app{store: s, thumbs: map[int64]*thumb{}, thumbSlots: make(chan struct{}, 2), shortcut: defaultShortcuts[0], shownAt: time.Now()}
 		a.settings.Language = languageChinese
@@ -88,6 +103,22 @@ func runNativeTestApp() {
 		})
 		var samples []memorySample
 		sample := func(phase string) {
+			var rawHeap runtime.MemStats
+			runtime.ReadMemStats(&rawHeap)
+			var rawCounters processMemoryCounters
+			rawCounters.Size = uint32(unsafe.Sizeof(rawCounters))
+			ok, _, err := syscall.NewLazyDLL("psapi.dll").NewProc("GetProcessMemoryInfo").Call(^uintptr(0), uintptr(unsafe.Pointer(&rawCounters)), uintptr(rawCounters.Size))
+			if ok == 0 {
+				panic(err)
+			}
+			var created, exited, kernel, user syscall.Filetime
+			ok, _, err = syscall.NewLazyDLL("kernel32.dll").NewProc("GetProcessTimes").Call(^uintptr(0),
+				uintptr(unsafe.Pointer(&created)), uintptr(unsafe.Pointer(&exited)), uintptr(unsafe.Pointer(&kernel)), uintptr(unsafe.Pointer(&user)))
+			if ok == 0 {
+				panic(err)
+			}
+			cpuMillis := float64(uint64(kernel.HighDateTime)<<32|uint64(kernel.LowDateTime))/10000 +
+				float64(uint64(user.HighDateTime)<<32|uint64(user.LowDateTime))/10000
 			debug.FreeOSMemory()
 			var heap runtime.MemStats
 			runtime.ReadMemStats(&heap)
@@ -108,13 +139,15 @@ func runNativeTestApp() {
 			}
 			var counters processMemoryCounters
 			counters.Size = uint32(unsafe.Sizeof(counters))
-			ok, _, err := syscall.NewLazyDLL("psapi.dll").NewProc("GetProcessMemoryInfo").Call(^uintptr(0), uintptr(unsafe.Pointer(&counters)), uintptr(counters.Size))
+			ok, _, err = syscall.NewLazyDLL("psapi.dll").NewProc("GetProcessMemoryInfo").Call(^uintptr(0), uintptr(unsafe.Pointer(&counters)), uintptr(counters.Size))
 			if ok == 0 {
 				panic(err)
 			}
 			samples = append(samples, memorySample{
 				Phase: phase, CacheEntries: len(a.thumbs), HeapMiB: float64(heap.HeapAlloc) / (1 << 20),
 				WorkingSetMiB: float64(counters.WorkingSet) / (1 << 20), PrivateMiB: float64(counters.PrivateUsage) / (1 << 20),
+				HeapRawMiB: float64(rawHeap.HeapAlloc) / (1 << 20), PrivateRawMiB: float64(rawCounters.PrivateUsage) / (1 << 20),
+				CPUMillis: cpuMillis, AtMillis: time.Now().UnixMilli(),
 			})
 			data, err := json.MarshalIndent(samples, "", "  ")
 			if err != nil {
@@ -224,6 +257,9 @@ type memorySample struct {
 	Phase                              string
 	CacheEntries                       int
 	HeapMiB, WorkingSetMiB, PrivateMiB float64
+	HeapRawMiB, PrivateRawMiB          float64
+	CPUMillis                        float64
+	AtMillis                         int64
 }
 
 func memoryTestPNG(seed int) []byte {
@@ -270,7 +306,13 @@ func TestNativePanelInteractions(t *testing.T) {
 		cmd.Process.Kill()
 		<-done
 		if logs.Len() > 0 {
-			t.Log(logs.String())
+			if path := os.Getenv("COPIED_NATIVE_FRAME_LOG"); path != "" {
+				if err := os.WriteFile(path, logs.Bytes(), 0o600); err != nil {
+					t.Error(err)
+				}
+			} else {
+				t.Log(logs.String())
+			}
 		}
 	})
 	var conn net.Conn
@@ -336,7 +378,7 @@ func TestNativePanelInteractions(t *testing.T) {
 	}
 	idle := func() { call("idle", map[string]any{"timeout": 5000}, nil) }
 	type testNode struct {
-		ID, Label, Role string
+		ID, Label, Role, Value string
 		States          []string
 	}
 	readTree := func() []testNode {
@@ -344,15 +386,42 @@ func TestNativePanelInteractions(t *testing.T) {
 		call("tree", nil, &tree)
 		return tree.Nodes
 	}
+	hasType := func(label string) bool {
+		for _, node := range readTree() {
+			if node.Role == "popUpButton" && node.Value == label {
+				return true
+			}
+		}
+		return false
+	}
 	press := func(label string) {
 		t.Helper()
+		labels := filterLabelsFor(languageChinese)
+		english := filterLabelsFor(languageEnglish)
+		if !slices.Contains(labels[:int(FilterPinned)], label) && !slices.Contains(english[:int(FilterPinned)], label) {
+			for _, node := range readTree() {
+				if node.Role == "radio" && node.Label == label {
+					call("act", map[string]any{"id": node.ID, "action": "press"}, nil)
+					idle()
+					return
+				}
+			}
+		}
 		for _, node := range readTree() {
-			if node.Role == "radio" && node.Label == label {
+			if node.Label == "剪贴板类型" || node.Label == "Clipboard types" {
 				call("act", map[string]any{"id": node.ID, "action": "press"}, nil)
+				idle()
+				break
+			}
+		}
+		for _, node := range readTree() {
+			if node.Role == "listItem" && node.Label == label {
+				call("act", map[string]any{"id": node.ID, "action": "press"}, nil)
+				idle()
 				return
 			}
 		}
-		t.Fatalf("native filter %q was not found", label)
+		t.Fatalf("native control %q was not found", label)
 	}
 	capture := func(name string) []byte {
 		t.Helper()
@@ -389,10 +458,8 @@ func TestNativePanelInteractions(t *testing.T) {
 		if node.Label == expectedCount {
 			count = true
 		}
-		if node.Role == "radio" && node.Label == "图片" {
-			for _, state := range node.States {
-				checked = checked || state == "checked"
-			}
+		if node.Role == "popUpButton" && node.Value == "图片" {
+			checked = true
 		}
 	}
 	if !checked || !count {
@@ -411,10 +478,31 @@ func TestNativePanelInteractions(t *testing.T) {
 		}
 		key("F9")
 		if os.Getenv("COPIED_NATIVE_SWITCH") == "1" {
-			for round := 0; round < 3; round++ {
-				for cycle := 0; cycle < 5; cycle++ {
-					for _, label := range filterLabelsFor(languageChinese) {
-						press(label)
+			time.Sleep(2 * time.Second)
+			key("F9")
+			rounds := 3
+			if value := os.Getenv("COPIED_NATIVE_SWITCH_ROUNDS"); value != "" {
+				rounds, err = strconv.Atoi(value)
+				if err != nil || rounds < 1 || rounds > 12 {
+					t.Fatal("COPIED_NATIVE_SWITCH_ROUNDS must be between 1 and 12")
+				}
+			}
+			for round := 0; round < rounds; round++ {
+				for cycle := 0; cycle < 3; cycle++ {
+					labels := filterLabelsFor(languageChinese)
+					for _, label := range labels[:int(FilterPinned)] {
+						if os.Getenv("COPIED_NATIVE_POPUP_ONLY") == "1" {
+							for _, node := range readTree() {
+								if node.Label == "剪贴板类型" {
+									call("act", map[string]any{"id": node.ID, "action": "press"}, nil)
+									break
+								}
+							}
+							idle()
+							key("Escape")
+						} else {
+							press(label)
+						}
 						idle()
 					}
 				}
@@ -437,6 +525,75 @@ func TestNativePanelInteractions(t *testing.T) {
 			t.Fatalf("native memory/lifecycle fixture failed: %s", logs.String())
 		}
 		return
+	}
+	pressRole := func(role, label string) {
+		t.Helper()
+		for _, node := range readTree() {
+			if node.Role == role && node.Label == label {
+				call("act", map[string]any{"id": node.ID, "action": "press"}, nil)
+				idle()
+				return
+			}
+		}
+		t.Fatalf("native %s %q was not found", role, label)
+	}
+	pressRole("button", "新建分组")
+	call("input", map[string]any{"events": []map[string]any{{"type": "text", "text": "Native Group"}}}, nil)
+	pressRole("button", "保存")
+	pressRole("radio", "全部")
+	call("input", map[string]any{"events": []map[string]any{{"type": "key", "key": "F7"}, {"type": "key", "key": "CmdOrCtrl+P"}}}, nil)
+	idle()
+	time.Sleep(1200 * time.Millisecond)
+	idle()
+	for _, node := range readTree() {
+		if node.Role == "dialog" || node.Role == "menu" {
+			t.Fatal("native group dialog survived hiding and reopening the panel")
+		}
+	}
+	call("input", map[string]any{"events": []map[string]any{{"type": "key", "key": "CmdOrCtrl+P"}}}, nil)
+	idle()
+	pressRole("checkBox", "Native Group")
+	capture("native-group-assignment")
+	pressRole("button", "完成")
+	pressRole("radio", "Native Group")
+	if len(readTree()) == 0 {
+		t.Fatal("native group assignment closed the panel")
+	}
+	capture("native-group-selected")
+	press("文本")
+	idle()
+	noMatches := false
+	for _, node := range readTree() {
+		noMatches = noMatches || node.Label == "没有匹配的记录"
+	}
+	if !noMatches {
+		t.Fatal("native group and type filters were not combined")
+	}
+	press("图片")
+	idle()
+	pressRole("menuButton", "更多分组与操作")
+	pressRole("menuItem", "删除分组")
+	pressRole("button", "删除")
+	// Keyboard selection must consume Enter instead of pasting a card.
+	for _, node := range readTree() {
+		if node.Label == "剪贴板类型" {
+			call("act", map[string]any{"id": node.ID, "action": "focus"}, nil)
+			call("act", map[string]any{"id": node.ID, "action": "press"}, nil)
+			break
+		}
+	}
+	idle()
+	call("input", map[string]any{"events": []map[string]any{{"type": "key", "key": "Home"}}}, nil)
+	idle()
+	call("input", map[string]any{"events": []map[string]any{{"type": "key", "key": "Enter"}}}, nil)
+	idle()
+	if !hasType("全部") {
+		for _, node := range readTree() {
+			if node.Role == "popUpButton" || node.Role == "listItem" {
+				t.Logf("type selection state: %+v", node)
+			}
+		}
+		t.Fatal("native keyboard selection did not choose the type or accidentally pasted")
 	}
 	call("input", map[string]any{"events": []map[string]any{{"type": "click", "button": "right", "x": 120, "y": 180}}}, nil)
 	idle()
@@ -570,7 +727,7 @@ func TestNativePanelInteractions(t *testing.T) {
 		}
 	}
 	idle()
-	if !hasLabel("Images") || !hasLabel("Search") {
+	if !hasType("All") || !hasLabel("Search") {
 		t.Fatal("native panel did not follow the English settings language")
 	}
 	call("input", map[string]any{"events": []map[string]any{{"type": "click", "button": "right", "x": 200, "y": 34}}}, nil)
