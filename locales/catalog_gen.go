@@ -54,6 +54,16 @@ func (msgs Messages) Text() string {
 	return Catalog.Format(msgs.locale, "text", nil)
 }
 
+// Code says "Code"
+// in the language the app shows.
+func Code() string { return In(i18n.Locale()).Code() }
+
+// Code says "Code"
+// in the language of msgs.
+func (msgs Messages) Code() string {
+	return Catalog.Format(msgs.locale, "code", nil)
+}
+
 // Links says "Links"
 // in the language the app shows.
 func Links() string { return In(i18n.Locale()).Links() }

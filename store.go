@@ -22,6 +22,7 @@ type Filter int
 const (
 	FilterAll Filter = iota
 	FilterText
+	FilterCode
 	FilterLink
 	FilterImage
 	FilterFiles
@@ -69,7 +70,47 @@ func openStoreAt(path string) (*Store, error) {
 			return nil, err
 		}
 	}
-	return &Store{db}, nil
+	s := &Store{db}
+	if err := s.migrateCodeClips(ctx); err != nil {
+		db.Close()
+		return nil, err
+	}
+	return s, nil
+}
+
+// Existing text clips are classified once, without changing their content,
+// IDs, hashes, saved status or order. The version advances atomically.
+func (s *Store) migrateCodeClips(ctx context.Context) error {
+	version, err := s.db.Query(ctx, `PRAGMA user_version`)
+	if err != nil {
+		return err
+	}
+	if len(version.Values) > 0 && integer(version.Values[0][0]) >= 1 {
+		return nil
+	}
+	var statements []sqlite.Statement
+	var lastID int64
+	for {
+		rows, err := s.db.Query(ctx, `SELECT id, substr(text, 1, ?) FROM clips
+			WHERE kind = 'text' AND id > ? ORDER BY id LIMIT 64`, codeDetectLimit, lastID)
+		if err != nil {
+			return err
+		}
+		if len(rows.Values) == 0 {
+			break
+		}
+		for _, row := range rows.Values {
+			lastID = integer(row[0])
+			if textKind(str(row[1])) == KindCode {
+				statements = append(statements, sqlite.Statement{
+					SQL: `UPDATE clips SET kind = 'code' WHERE id = ?`, Args: []any{lastID},
+				})
+			}
+		}
+	}
+	statements = append(statements, sqlite.Statement{SQL: `PRAGMA user_version = 1`})
+	_, err = s.db.Transaction(ctx, statements)
+	return err
 }
 
 func (s *Store) Close() error { return s.db.Close() }
@@ -81,6 +122,7 @@ func (s *Store) Add(c *Clip) error {
 	_, err := s.db.Execute(ctx, `INSERT INTO clips (kind, text, html, data, thumb, width, height, length, hash, created_at, used_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (hash) DO UPDATE SET
+			kind = excluded.kind,
 			used_at = excluded.used_at,
 			html = CASE WHEN excluded.html <> '' THEN excluded.html ELSE html END`,
 		string(c.Kind), c.Text, c.HTML, c.Data, c.Thumb, c.Width, c.Height, c.Length, c.Hash, now, now)
@@ -99,6 +141,8 @@ func (s *Store) List(filter Filter, query string) ([]*Clip, error) {
 	switch filter {
 	case FilterText:
 		where = append(where, "kind IN ('text', 'color')")
+	case FilterCode:
+		where = append(where, "kind = 'code'")
 	case FilterLink:
 		where = append(where, "kind = 'link'")
 	case FilterImage:

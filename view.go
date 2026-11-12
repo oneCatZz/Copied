@@ -376,6 +376,12 @@ func (a *app) card(c *ui.Context, i int, clip *Clip) (action func()) {
 func (a *app) preview(c *ui.Context, i int, clip *Clip, hue ui.Color) {
 	t := c.Theme()
 	switch clip.Kind {
+	case KindCode:
+		ui.Column(c).Grow(1).Basis(0).Margin(0, 12).Padding(10).Radius(10).
+			Background(t.SurfaceHover).Clip().Children(func() {
+				ui.RichText(c, clip.codePreview().styledSpans(t)...).
+					Font("monospace").FontSize(11.5).LineHeight(1.55).NoWrap().MaxLines(8)
+			})
 	case KindImage:
 		// Pictures are read as their cards come near the view.
 		box := ui.Box(c).Grow(1).Basis(0).Margin(0, 12).Radius(10).Clip().Background(t.SurfaceHover)

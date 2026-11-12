@@ -26,6 +26,7 @@ type Kind string
 
 const (
 	KindText  Kind = "text"
+	KindCode  Kind = "code"
 	KindLink  Kind = "link"
 	KindColor Kind = "color"
 	KindImage Kind = "image"
@@ -48,6 +49,7 @@ type Clip struct {
 	Hash   string
 	Pinned bool
 	UsedAt time.Time
+	code   *codePreview // bounded, lazily highlighted preview; never persisted
 }
 
 // Files returns the paths of a clip of files.
@@ -116,6 +118,9 @@ func textKind(text string) Kind {
 			return KindLink
 		}
 	}
+	if _, _, ok := detectCode(text); ok {
+		return KindCode
+	}
 	return KindText
 }
 
@@ -177,6 +182,10 @@ func (c *Clip) detail(locale string) string {
 		}
 	case KindColor:
 		return tx.Color()
+	case KindCode:
+		if language := c.codePreview().language; language != "" {
+			return language + " · " + tx.CharacterCount(c.Length)
+		}
 	}
 	return tx.CharacterCount(c.Length)
 }
@@ -184,6 +193,8 @@ func (c *Clip) detail(locale string) string {
 func kindLabel(k Kind, locale string) string {
 	tx := locales.In(locale)
 	switch k {
+	case KindCode:
+		return tx.Code()
 	case KindLink:
 		return tx.Link()
 	case KindColor:

@@ -55,6 +55,8 @@ func makeTheme(t *ui.Theme, c themeColors) *ui.Theme {
 func kindColor(k Kind, dark bool) ui.Color {
 	hue := float32(262) // text: blue
 	switch k {
+	case KindCode:
+		hue = 145
 	case KindLink:
 		hue = 172
 	case KindImage:
@@ -78,6 +80,7 @@ var (
 	iconSearch   = svg(`<circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/>`)
 	iconSettings = svg(`<path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/>`)
 	iconText     = svg(`<path d="M5 6h14M5 12h14M5 18h9"/>`)
+	iconCode     = svg(`<path d="m8 6-6 6 6 6m8-12 6 6-6 6m-3-15-2 18"/>`)
 	iconLink     = svg(`<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>`)
 	iconImage    = svg(`<rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="1.6"/><path d="m4 18 5-5 4 4 2.5-2.5L20 19"/>`)
 	iconFile     = svg(`<path d="M7 3h7l5 5v11a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M14 3v5h5"/>`)
@@ -88,6 +91,8 @@ var (
 
 func kindIcon(k Kind) *ui.SVG {
 	switch k {
+	case KindCode:
+		return iconCode
 	case KindLink:
 		return iconLink
 	case KindImage:
