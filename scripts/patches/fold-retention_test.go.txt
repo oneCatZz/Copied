@@ -1,0 +1,29 @@
+package scene
+
+import "testing"
+
+// Exercise both early return and a shorter folded scene. Checking the entire
+// backing array catches references that are invisible through its new length.
+func TestCopiedFoldDropsPreviousScene(t *testing.T) {
+ for _, next := range []struct { name string; scene Scene }{
+  {"plain", Scene{Ops: []Op{{Kind: OpFill}}}},
+  {"shorter", Scene{Ops: []Op{{Kind: OpFill, Transform: Translation(1, 0)}}}},
+ } {
+  t.Run(next.name, func(t *testing.T) {
+   var f TranslationFolder
+   oldImage := &Image{}
+   previous := Scene{Ops: []Op{
+    {Kind: OpFill, Transform: Translation(1, 0)},
+    {Kind: OpImage, Image: oldImage},
+   }}
+   f.fold(&previous)
+   f.fold(&next.scene)
+   for i, op := range f.ops[:cap(f.ops)] {
+    if op.Image == oldImage { t.Fatalf("previous image retained at backing-array index %d", i) }
+   }
+   for i, op := range f.s.Ops {
+    if op.Image == oldImage { t.Fatalf("previous image retained in scene at index %d", i) }
+   }
+  })
+ }
+}
