@@ -89,6 +89,7 @@ func TestFiltersSelectAndInterruptWithoutRebuilding(t *testing.T) {
 		builds++
 		ui.Themed(c, lightTheme).Fill().Padding(8).Children(func() { a.filters(c) })
 	}, 320, 44)
+	tt.SetLocale(languageChinese)
 	if err := tt.Click("文本"); err != nil {
 		t.Fatal(err)
 	}
@@ -124,6 +125,7 @@ func TestFiltersReducedMotionAndDarkAppearance(t *testing.T) {
 	tt := ui.NewTesterWith(func(c *ui.Context) {
 		ui.Themed(c, darkTheme).Fill().Padding(8).Children(func() { a.filters(c) })
 	}, 320, 44, ui.TesterOptions{Dark: true, Preferences: ui.Preferences{ReduceMotion: true}})
+	tt.SetLocale(languageChinese)
 	if err := tt.Click("链接"); err != nil {
 		t.Fatal(err)
 	}

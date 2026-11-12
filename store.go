@@ -28,8 +28,6 @@ const (
 	FilterPinned
 )
 
-var filterLabels = []string{"全部", "文本", "链接", "图片", "文件", "收藏"}
-
 // Store keeps the history in a SQLite database of the user's data
 // directory. It is safe from any goroutine.
 type Store struct{ db *sqlite.DB }

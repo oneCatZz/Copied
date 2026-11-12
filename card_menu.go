@@ -1,6 +1,9 @@
 package main
 
-import "github.com/egoist/mygo/ui"
+import (
+	"copied/locales"
+	"github.com/egoist/mygo/ui"
+)
 
 var (
 	menuPaste = svg(`<rect x="5" y="5" width="14" height="16" rx="2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 13h6M12 10v6"/>`)
@@ -16,30 +19,30 @@ func (a *app) cardMenu(c *ui.Context, card ui.Element, i int, clip *Clip) (actio
 		a.chosen = i // The displayed shortcuts act on the right-clicked card.
 	}
 	t := c.Theme()
+	tx := locales.In(c.Locale())
 	m.Popup(func(panel ui.Element) {
-		panel.Width(trayMenuWidth).Padding(6).Radius(8).Background(t.Surface).
-			Border(1, t.Border).Shadow(0, 8, 24, -4, ui.RGB(0, 0, 0).Alpha(0.18))
-		if menuActionRow(c, m.Item(), menuPaste, "粘贴", menuShortcut("Enter"), t.Accent).Clicked() {
+		popupSurface(c, panel).Width(trayMenuWidth).Padding(6)
+		if menuActionRow(c, m.Item(), menuPaste, tx.Paste(), menuShortcut("Enter"), t.Accent).Clicked() {
 			action = func() { a.paste(i, false) }
 		}
 		if clip.Kind != KindImage && clip.Kind != KindFiles {
-			if menuActionRow(c, m.Item(), iconText, "粘贴为纯文本", menuShortcut("Shift+Enter"), t.TextMuted).Clicked() {
+			if menuActionRow(c, m.Item(), iconText, tx.PastePlain(), menuShortcut("Shift+Enter"), t.TextMuted).Clicked() {
 				action = func() { a.paste(i, true) }
 			}
 		}
-		if menuActionRow(c, m.Item(), menuCopy, "仅复制", menuShortcut("CmdOrCtrl+Enter"), t.TextMuted).Clicked() {
+		if menuActionRow(c, m.Item(), menuCopy, tx.CopyOnly(), menuShortcut("CmdOrCtrl+Enter"), t.TextMuted).Clicked() {
 			action = func() { a.copyOnly(i) }
 		}
 		trayDivider(c)
-		label, ink := "收藏", t.TextMuted
+		label, ink := tx.Favorite(), t.TextMuted
 		if clip.Pinned {
-			label, ink = "取消收藏", t.Accent
+			label, ink = tx.Unfavorite(), t.Accent
 		}
 		if menuActionRow(c, m.CheckItem(clip.Pinned), iconPin, label, menuShortcut("CmdOrCtrl+P"), ink).Clicked() {
 			action = func() { a.togglePin(i) }
 		}
 		trayDivider(c)
-		if menuActionRow(c, m.Item().TextColor(t.Danger), trayTrash, "删除", menuShortcut("CmdOrCtrl+Backspace"), t.Danger).Clicked() {
+		if menuActionRow(c, m.Item().TextColor(t.Danger), trayTrash, tx.Delete(), menuShortcut("CmdOrCtrl+Backspace"), t.Danger).Clicked() {
 			action = func() { a.remove(i) }
 		}
 	})

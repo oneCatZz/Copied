@@ -21,7 +21,18 @@ var (
 		border: "#2b2e37", text: "#eceef3", muted: "#8b90a0",
 		accent: "#7c87ff", accentHover: "#8f99ff", accentPressed: "#6a75f0",
 	})
+	lightEditTheme = editMenuTheme(lightTheme)
+	darkEditTheme  = editMenuTheme(darkTheme)
 )
+
+// The text editor keeps MyGo's selection, clipboard and undo commands.
+// Its drawn menu follows the same surface, type and hover colors as ours.
+func editMenuTheme(t *ui.Theme) *ui.Theme {
+	menu := *t
+	menu.Background, menu.Accent, menu.AccentText = t.Surface, t.SurfaceHover, t.Text
+	menu.FontSize, menu.Radius = 13, 6
+	return &menu
+}
 
 type themeColors struct {
 	background, surface, hover, pressed, border, text, muted string

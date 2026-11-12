@@ -9,7 +9,7 @@ import (
 )
 
 func cardMenuTester(a *app, dark bool) *ui.Tester {
-	return ui.NewTesterWith(func(c *ui.Context) {
+	tt := ui.NewTesterWith(func(c *ui.Context) {
 		t := lightTheme
 		if c.Theme().Dark {
 			t = darkTheme
@@ -30,6 +30,8 @@ func cardMenuTester(a *app, dark bool) *ui.Tester {
 			action()
 		}
 	}, 640, panelHeight, ui.TesterOptions{Dark: dark})
+	tt.SetLocale(languageChinese)
+	return tt
 }
 
 func TestCardMenuActionsTargetTheRightClickedClip(t *testing.T) {

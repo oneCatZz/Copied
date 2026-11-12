@@ -17,6 +17,8 @@ type Settings struct {
 	// Shortcut shows and hides the panel, as an accelerator. Empty, the
 	// first of defaultShortcuts that is free does.
 	Shortcut string `json:"shortcut,omitempty"`
+	// Empty follows the system; otherwise "en" or "zh-Hans".
+	Language string `json:"language,omitempty"`
 }
 
 func settingsPath() (string, error) {

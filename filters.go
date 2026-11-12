@@ -4,6 +4,8 @@ import (
 	"math"
 	"time"
 
+	"copied/locales"
+
 	"github.com/egoist/mygo/ui"
 )
 
@@ -42,7 +44,7 @@ func (a *app) filters(c *ui.Context) {
 	flow, still := a.filterFlow, c.Preferences().ReduceMotion
 	now := c.Now()
 	ui.RadioGroup(c.Key("filters"), func() {
-		for i, label := range filterLabels {
+		for i, label := range filterLabelsFor(c.Locale()) {
 			filter := Filter(i)
 			chip := ui.RadioBase(c.Key(filter), &a.filter, filter).Size(filterChipWidth, 28).
 				Center().Radius(14).Cursor(ui.CursorPointer).Label(label)
@@ -67,7 +69,7 @@ func (a *app) filters(c *ui.Context) {
 				ui.Text(c, label).FontSize(12).FontWeight(550).TextColor(color)
 			})
 		}
-	}).Row().Gap(2).Height(28).Label("剪贴板类型").Draw(func(p *ui.Painter, r ui.Rect) {
+	}).Row().Gap(2).Height(28).Label(locales.In(c.Locale()).ClipboardTypes()).Draw(func(p *ui.Painter, r ui.Rect) {
 		left, right, moving := flow.edges(p.Now())
 		if still {
 			left, right, moving = flow.target, flow.target+filterChipWidth, false

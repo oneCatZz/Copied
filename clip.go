@@ -14,6 +14,8 @@ import (
 	"strings"
 	"time"
 
+	"copied/locales"
+
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/transfer"
 	"golang.org/x/image/draw"
@@ -162,50 +164,53 @@ func writeClipboard(c *Clip, plain bool) error {
 }
 
 // detail is the line a card's footer shows.
-func (c *Clip) detail() string {
+func (c *Clip) detail(locale string) string {
+	tx := locales.In(locale)
 	switch c.Kind {
 	case KindImage:
 		return fmt.Sprintf("%d × %d", c.Width, c.Height)
 	case KindFiles:
-		return fmt.Sprintf("%d 个文件", c.Length)
+		return tx.FileCount(c.Length)
 	case KindLink:
 		if u, err := url.Parse(strings.TrimSpace(c.Text)); err == nil {
 			return u.Host
 		}
 	case KindColor:
-		return "颜色"
+		return tx.Color()
 	}
-	return fmt.Sprintf("%d 个字符", c.Length)
+	return tx.CharacterCount(c.Length)
 }
 
-func kindLabel(k Kind) string {
+func kindLabel(k Kind, locale string) string {
+	tx := locales.In(locale)
 	switch k {
 	case KindLink:
-		return "链接"
+		return tx.Link()
 	case KindColor:
-		return "颜色"
+		return tx.Color()
 	case KindImage:
-		return "图片"
+		return tx.Image()
 	case KindFiles:
-		return "文件"
+		return tx.Files()
 	}
-	return "文本"
+	return tx.Text()
 }
 
 // ago says how long ago t was, shortly.
-func ago(t time.Time) string {
+func ago(t time.Time, locale string) string {
+	tx := locales.In(locale)
 	d := time.Since(t)
 	switch {
 	case d < time.Minute:
-		return "刚刚"
+		return tx.JustNow()
 	case d < time.Hour:
-		return fmt.Sprintf("%d 分钟前", int(d.Minutes()))
+		return tx.MinutesAgo(int(d.Minutes()))
 	case d < 24*time.Hour:
-		return fmt.Sprintf("%d 小时前", int(d.Hours()))
+		return tx.HoursAgo(int(d.Hours()))
 	case d < 48*time.Hour:
-		return "昨天"
+		return tx.Yesterday()
 	case d < 30*24*time.Hour:
-		return fmt.Sprintf("%d 天前", int(d.Hours()/24))
+		return tx.DaysAgo(int(d.Hours() / 24))
 	}
 	return t.Format("2006-01-02")
 }

@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -37,8 +38,19 @@ func TestMain(m *testing.M) {
 // global shortcuts, tray or login registration, and no single-instance lock.
 func runNativeTestApp() {
 	mygo.App.SetName("Copied UI Test")
+	mygo.App.SetPath(mygo.PathUserData, filepath.Dir(os.Getenv("COPIED_NATIVE_DB")))
+	mygo.App.SetLocale(languageChinese)
 	mygo.App.OnWindowAllClosed(func() {})
 	mygo.App.WhenReady(func() {
+		if expected := os.Getenv("COPIED_NATIVE_EXPECT_LANGUAGE"); expected != "" {
+			a := &app{settings: loadSettings()}
+			a.configureLanguage()
+			if a.settings.Language != expected || mygo.App.Locale() != expected {
+				panic("saved application language was not restored on startup")
+			}
+			mygo.App.Quit()
+			return
+		}
 		s, err := openStoreAt(os.Getenv("COPIED_NATIVE_DB"))
 		if err != nil {
 			panic(err)
@@ -68,6 +80,8 @@ func runNativeTestApp() {
 			}
 		}
 		a := &app{store: s, thumbs: map[int64]*thumb{}, thumbSlots: make(chan struct{}, 2), shortcut: defaultShortcuts[0], shownAt: time.Now()}
+		a.settings.Language = languageChinese
+		a.configureLanguage()
 		mygo.App.OnBeforeQuit(func(*mygo.QuitEvent) {
 			a.quitting = true
 			a.cancelPanelRelease()
@@ -116,6 +130,14 @@ func runNativeTestApp() {
 			Hidden: true, Panel: true, Frameless: true, Transparent: true,
 			Vibrancy: mygo.VibrancyGlass, CornerRadius: 18, Content: ui.View(func(c *ui.Context) {
 				if !profileRun {
+					// Arm a global-style toggle before opening a modal, whose
+					// focus scope intentionally blocks local window shortcuts.
+					c.OnWindowShortcut(0, ui.KeyF7, func() {
+						time.AfterFunc(time.Second, func() {
+							mygo.RunOnMain(a.toggle)
+							time.AfterFunc(100*time.Millisecond, func() { mygo.RunOnMain(a.toggle) })
+						})
+					})
 					c.OnWindowShortcut(0, ui.KeyF8, func() {
 						a.toggle()
 						time.AfterFunc(100*time.Millisecond, func() { mygo.RunOnMain(a.toggle) })
@@ -391,7 +413,7 @@ func TestNativePanelInteractions(t *testing.T) {
 		if os.Getenv("COPIED_NATIVE_SWITCH") == "1" {
 			for round := 0; round < 3; round++ {
 				for cycle := 0; cycle < 5; cycle++ {
-					for _, label := range filterLabels {
+					for _, label := range filterLabelsFor(languageChinese) {
 						press(label)
 						idle()
 					}
@@ -449,6 +471,130 @@ func TestNativePanelInteractions(t *testing.T) {
 		t.Fatal("native context menu survived hiding and reopening the panel")
 	}
 	capture("native-reopened-without-menu")
+	call("input", map[string]any{"events": []map[string]any{
+		{"type": "click", "x": 200, "y": 34},
+		{"type": "text", "text": "search menu regression"},
+		{"type": "click", "button": "right", "x": 200, "y": 34},
+	}}, nil)
+	idle()
+	hasRole := func(role string) bool {
+		for _, node := range readTree() {
+			if node.Role == role {
+				return true
+			}
+		}
+		return false
+	}
+	if !hasRole("menu") {
+		t.Fatal("native search editing menu was not drawn in the panel")
+	}
+	chineseItems := map[string]bool{"撤销": false, "剪切": false, "复制": false, "粘贴": false, "删除": false, "全选": false}
+	for _, node := range readTree() {
+		if node.Role == "menuItem" {
+			if _, expected := chineseItems[node.Label]; expected {
+				chineseItems[node.Label] = true
+			}
+		}
+	}
+	for label, found := range chineseItems {
+		if !found {
+			t.Fatalf("native search menu is missing the Chinese label %q", label)
+		}
+	}
+	capture("native-search-menu")
+	call("input", map[string]any{"events": []map[string]any{{"type": "key", "key": "F8"}}}, nil)
+	time.Sleep(200 * time.Millisecond)
+	idle()
+	if hasRole("menu") {
+		t.Fatal("native search menu survived hiding and reopening the panel")
+	}
+	call("input", map[string]any{"events": []map[string]any{
+		{"type": "key", "key": "F7"},
+		{"type": "key", "key": "CmdOrCtrl+,"},
+	}}, nil)
+	idle()
+	if !hasRole("dialog") {
+		t.Fatal("native settings dialog did not open")
+	}
+	capture("native-settings")
+	time.Sleep(1200 * time.Millisecond)
+	idle()
+	if hasRole("dialog") || hasRole("menu") {
+		t.Fatal("native settings or menu survived hiding and reopening the panel")
+	}
+	call("input", map[string]any{"events": []map[string]any{{"type": "key", "key": "CmdOrCtrl+,"}}}, nil)
+	idle()
+	hasLabel := func(label string) bool {
+		for _, node := range readTree() {
+			if node.Label == label {
+				return true
+			}
+		}
+		return false
+	}
+	wantPreference := func(language string) {
+		t.Helper()
+		data, err := os.ReadFile(filepath.Join(dir, "settings.json"))
+		var saved Settings
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := json.Unmarshal(data, &saved); err != nil || saved.Language != language {
+			t.Fatalf("language preference was not saved: %s, error=%v", data, err)
+		}
+	}
+	wantRestoredPreference := func(language string) {
+		t.Helper()
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		probe := exec.CommandContext(ctx, exe)
+		probe.Env = append(os.Environ(), "COPIED_NATIVE_HELPER=1", "MYGO_AUTOMATION=",
+			"COPIED_NATIVE_DB="+filepath.Join(dir, "history.db"), "COPIED_NATIVE_EXPECT_LANGUAGE="+language)
+		probe.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+		if output, err := probe.CombinedOutput(); err != nil {
+			t.Fatalf("language was not restored by a fresh process: %v\n%s", err, output)
+		}
+	}
+	press("English")
+	idle()
+	if !hasLabel("Done") || !hasLabel("Follow system") {
+		t.Fatal("native app did not switch all surfaces to English")
+	}
+	wantPreference(languageEnglish)
+	wantRestoredPreference(languageEnglish)
+	capture("native-settings-english")
+	for _, node := range readTree() {
+		if node.Label == "Done" && node.Role == "button" {
+			call("act", map[string]any{"id": node.ID, "action": "press"}, nil)
+			break
+		}
+	}
+	idle()
+	if !hasLabel("Images") || !hasLabel("Search") {
+		t.Fatal("native panel did not follow the English settings language")
+	}
+	call("input", map[string]any{"events": []map[string]any{{"type": "click", "button": "right", "x": 200, "y": 34}}}, nil)
+	idle()
+	if !hasLabel("Copy") || !hasLabel("Paste") || hasLabel("复制") {
+		t.Fatal("native editing menu did not follow the English application language")
+	}
+	capture("native-search-menu-english")
+	call("input", map[string]any{"events": []map[string]any{
+		{"type": "key", "key": "Escape"}, {"type": "key", "key": "CmdOrCtrl+,"},
+	}}, nil)
+	idle()
+	press("简体中文")
+	idle()
+	if !hasLabel("完成") || !hasLabel("跟随系统") {
+		t.Fatal("native app did not switch all surfaces back to Chinese")
+	}
+	wantPreference(languageChinese)
+	wantRestoredPreference(languageChinese)
+	press("跟随系统")
+	idle()
+	wantPreference("")
+	call("input", map[string]any{"events": []map[string]any{{"type": "key", "key": "Escape"}}}, nil)
+	idle()
 	call("input", map[string]any{"events": []map[string]any{{"type": "key", "key": "Escape"}}}, nil)
 	select {
 	case <-done:

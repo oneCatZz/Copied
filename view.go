@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"copied/locales"
+
 	"github.com/egoist/mygo/ui"
 )
 
@@ -139,6 +141,7 @@ func (a *app) view(c *ui.Context) {
 // settings button.
 func (a *app) header(c *ui.Context) {
 	t := c.Theme()
+	tx := locales.In(c.Locale())
 	ui.Row(c).Padding(18, 22, 6, 22).Gap(16).AlignItems(ui.Center).Children(func() {
 		ui.Row(c).Gap(9).AlignItems(ui.Center).Children(func() {
 			ui.Box(c).Size(24, 24).Center().Radius(7).Gradient(t.Accent, kindColor(KindImage, t.Dark), 135).
@@ -148,7 +151,11 @@ func (a *app) header(c *ui.Context) {
 			ui.Text(c, "Copied").FontSize(15).FontWeight(650).LetterSpacing(-0.2)
 		})
 
-		field := ui.Row(c.Key("search")).Width(300).Height(34).PaddingX(11).Gap(8).AlignItems(ui.Center).
+		editTheme := lightEditTheme
+		if t.Dark {
+			editTheme = darkEditTheme
+		}
+		field := ui.Themed(c.Key("search"), editTheme).Row().Width(300).Height(34).PaddingX(11).Gap(8).AlignItems(ui.Center).
 			Radius(10).Background(t.Surface)
 		if a.input.Focused(c) {
 			field.Border(1, t.Accent).Shadow(0, 0, 0, 3, t.Accent.Alpha(0.2))
@@ -157,9 +164,11 @@ func (a *app) header(c *ui.Context) {
 		}
 		field.Transition(fadeMotion).Children(func() {
 			ui.Icon(c, iconSearch).FontSize(14).TextColor(t.TextMuted)
-			input := ui.TextInputBase(c.Key("input"), &a.query).Bind(&a.input).Grow(1).FontSize(13).
-				Placeholder("搜索剪贴板历史").Label("搜索").
+			input := ui.TextInputBase(c.Key(searchInputKey(a.searchSession)), &a.query).Bind(&a.input).Grow(1).FontSize(13).
+				CaretColor(t.Accent).
+				Placeholder(tx.SearchHistory()).Label(tx.Search()).
 				OnTextKey(func(k ui.TextKey) bool { return a.key(k.Mods, k.Key) })
+			input.PopoverMenu(func(m *ui.Menu) { m.EditItems() })
 			if input.Changed() {
 				a.chosen, a.scrollTo = 0, true
 				a.reload()
@@ -171,13 +180,17 @@ func (a *app) header(c *ui.Context) {
 		ui.Spacer(c)
 		if a.paused.Load() {
 			ui.Row(c).Height(22).PaddingX(9).AlignItems(ui.Center).Radius(11).Background(t.Warning.Alpha(0.16)).Children(func() {
-				ui.Text(c, "已暂停记录").FontSize(11).TextColor(t.Warning)
+				ui.Text(c, tx.RecordingPaused()).FontSize(11).TextColor(t.Warning)
 			})
 		}
-		ui.Textf(c, "%d 条", len(a.clips)).FontSize(11.5).TextColor(t.TextMuted)
+		ui.Text(c, tx.ClipCount(len(a.clips))).FontSize(11.5).TextColor(t.TextMuted)
 
-		gear := ui.Row(c.Key("settings")).Size(30, 30).Center().Radius(9).Cursor(ui.CursorPointer).
-			Label("快捷键设置").Tooltip("快捷键设置")
+		gear := ui.Row(c.Key(settingsTipKey(a.searchSession))).Size(30, 30).Center().Radius(9).Cursor(ui.CursorPointer).
+			Label(tx.Settings()).Description(tx.Settings())
+		ui.TooltipBase(c, gear, func(tip ui.Element) {
+			popupSurface(c, tip).Padding(6, 10).Radius(6).Margin(0, 0, 6, 0).
+				Children(func() { ui.Text(c, tx.Settings()).FontSize(12) })
+		})
 		color := t.TextMuted
 		if gear.Hovered() {
 			gear.Background(t.SurfaceHover)
@@ -195,11 +208,12 @@ func (a *app) header(c *ui.Context) {
 // strip is the row of cards, which scrolls sideways.
 func (a *app) strip(c *ui.Context) {
 	t := c.Theme()
+	tx := locales.In(c.Locale())
 	if len(a.clips) == 0 {
 		ui.Column(c).Grow(1).Center().Gap(6).Children(func() {
-			msg, hint := "还没有记录", "复制一段文字、一张图片或几个文件试试"
+			msg, hint := tx.EmptyHistory(), tx.EmptyHistoryHint()
 			if a.query != "" || a.filter != FilterAll {
-				msg, hint = "没有匹配的记录", "换个关键词或筛选条件"
+				msg, hint = tx.NoMatches(), tx.NoMatchesHint()
 			}
 			ui.Text(c, msg).FontSize(15).FontWeight(600)
 			ui.Text(c, hint).FontSize(12).TextColor(t.TextMuted)
@@ -294,7 +308,7 @@ func (a *app) card(c *ui.Context, i int, clip *Clip) (action func()) {
 	// Previews clip their own contents inside the card's padding. Clipping
 	// this animated rounded ancestor too creates redundant retained masks.
 	card := ui.Column(c.Key(clip.ID)).Width(cardWidth).Shrink(0).Radius(16).
-		Background(t.Surface).Cursor(ui.CursorPointer).Label(kindLabel(clip.Kind))
+		Background(t.Surface).Cursor(ui.CursorPointer).Label(kindLabel(clip.Kind, c.Locale()))
 	lift := float32(0)
 	switch {
 	case selected:
@@ -337,18 +351,18 @@ func (a *app) card(c *ui.Context, i int, clip *Clip) (action func()) {
 			ui.Box(c).Size(24, 24).Center().Radius(8).Background(hue.Alpha(0.16)).Children(func() {
 				ui.Icon(c, kindIcon(clip.Kind)).FontSize(13).TextColor(hue)
 			})
-			ui.Text(c, kindLabel(clip.Kind)).FontSize(12).FontWeight(600)
+			ui.Text(c, kindLabel(clip.Kind, c.Locale())).FontSize(12).FontWeight(600)
 			ui.Spacer(c)
 			if clip.Pinned {
 				ui.Icon(c, iconPin).FontSize(12).TextColor(kindColor(KindFiles, t.Dark))
 			}
-			ui.Text(c, ago(clip.UsedAt)).FontSize(11).TextColor(t.TextMuted)
+			ui.Text(c, ago(clip.UsedAt, c.Locale())).FontSize(11).TextColor(t.TextMuted)
 		})
 
 		a.preview(c, i, clip, hue)
 
 		ui.Row(c).Padding(10, 14, 12, 14).Gap(8).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, clip.detail()).FontSize(11).TextColor(t.TextMuted).SingleLine().Grow(1)
+			ui.Text(c, clip.detail(c.Locale())).FontSize(11).TextColor(t.TextMuted).SingleLine().Grow(1)
 			if i < len(digitKeys) {
 				keycap(c, cmdCap()+" "+fmt.Sprint(i+1))
 			}
@@ -400,7 +414,7 @@ func (a *app) preview(c *ui.Context, i int, clip *Clip, hue ui.Color) {
 				})
 			}
 			if more := len(names) - shown; more > 0 {
-				ui.Textf(c, "还有 %d 个…", more).FontSize(11).TextColor(t.TextMuted)
+				ui.Text(c, locales.In(c.Locale()).MoreFiles(more)).FontSize(11).TextColor(t.TextMuted)
 			}
 		})
 	default:
@@ -525,18 +539,19 @@ func keycap(c *ui.Context, key string) {
 // footer lists the keys of the panel.
 func (a *app) footer(c *ui.Context) {
 	t := c.Theme()
+	tx := locales.In(c.Locale())
 	cmd := cmdCap()
 	hints := []struct {
 		keys  []string
 		label string
 	}{
-		{[]string{"←", "→"}, "选择"},
-		{[]string{"↵"}, "粘贴"},
-		{[]string{"⇧", "↵"}, "纯文本粘贴"},
-		{[]string{cmd, "↵"}, "仅复制"},
-		{[]string{cmd, "P"}, "收藏"},
-		{[]string{cmd, "⌫"}, "删除"},
-		{[]string{"esc"}, "关闭"},
+		{[]string{"←", "→"}, tx.Select()},
+		{[]string{"↵"}, tx.Paste()},
+		{[]string{"⇧", "↵"}, tx.PastePlainHint()},
+		{[]string{cmd, "↵"}, tx.CopyOnly()},
+		{[]string{cmd, "P"}, tx.Favorite()},
+		{[]string{cmd, "⌫"}, tx.Delete()},
+		{[]string{"esc"}, tx.Close()},
 	}
 	hint := func(keys []string, label string) {
 		ui.Row(c).Gap(4).AlignItems(ui.Center).Children(func() {
@@ -552,7 +567,7 @@ func (a *app) footer(c *ui.Context) {
 		}
 		ui.Spacer(c)
 		if a.shortcut != "" {
-			hint(keycaps(a.shortcut), "显示 / 隐藏")
+			hint(keycaps(a.shortcut), tx.ShowHide())
 		}
 	})
 }
@@ -561,49 +576,58 @@ func (a *app) footer(c *ui.Context) {
 // shortcut waits for the keys of another.
 func (a *app) settingsDialog(c *ui.Context) {
 	t := c.Theme()
-	ui.Modal(c, &a.settingsOpen, func() {
-		ui.Column(c).Width(440).Gap(16).Children(func() {
+	tx := locales.In(c.Locale())
+	ui.DialogBase(c, &a.settingsOpen, func(backdrop, panel ui.Element) {
+		width, height := c.Size()
+		backdrop.Background(ui.RGBA(0, 0, 0, 0.4))
+		popupSurface(c, panel).Padding(18).Radius(12).MaxWidth(width - 32).MaxHeight(height - 24)
+		ui.Column(c).Width(440).MaxWidth(max(0, width-68)).Gap(16).Children(func() {
 			ui.Column(c).Gap(4).Children(func() {
-				ui.Text(c, "快捷键").FontSize(16).FontWeight(650)
-				ui.Text(c, "点击右侧的快捷键，然后按下新的组合键；按 esc 取消。").FontSize(12).TextColor(t.TextMuted)
+				ui.Text(c, tx.Settings()).FontSize(16).FontWeight(650)
+				ui.Text(c, tx.ShortcutInstructions()).FontSize(12).TextColor(t.TextMuted)
 			})
 
 			ui.Row(c).Gap(12).AlignItems(ui.Center).Children(func() {
 				ui.Column(c).Grow(1).Gap(2).Children(func() {
-					ui.Text(c, "显示 / 隐藏面板").FontSize(13).FontWeight(550)
-					ui.Text(c, "在任何应用里呼出剪贴板历史").FontSize(11.5).TextColor(t.TextMuted)
+					ui.Text(c, tx.ShowHidePanel()).FontSize(13).FontWeight(550)
+					ui.Text(c, tx.ShowHidePanelHint()).FontSize(11.5).TextColor(t.TextMuted)
 				})
 				a.recorder(c)
 			})
 			if a.recordError != "" {
-				ui.Text(c, a.recordError).FontSize(12).TextColor(t.Danger)
+				ui.Text(c, locales.Catalog.Format(c.Locale(), a.recordError, nil)).FontSize(12).TextColor(t.Danger)
 			}
+			a.languageOptions(c)
 
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-				if ui.Button(c, "恢复默认").Clicked() {
+				if dialogButton(c, "reset-shortcut", tx.ResetDefault(), false).Clicked() {
 					if a.recording {
 						a.stopRecording("")
 					}
 					a.resetShortcut()
 				}
 				ui.Spacer(c)
-				if ui.PrimaryButton(c, "完成").Clicked() {
+				if dialogButton(c, "finish-settings", tx.Done(), true).Clicked() {
 					a.settingsOpen = false
 				}
 			})
 		})
 	})
-	if !a.settingsOpen && a.recording {
-		a.stopRecording("") // dismissed while it waited
+	if !a.settingsOpen {
+		if a.recording {
+			a.stopRecording("") // dismissed while it waited
+		}
+		a.recordError = ""
 	}
 }
 
 // recorder shows the shortcut, or the keys held as it waits for a new one.
 func (a *app) recorder(c *ui.Context) {
 	t := c.Theme()
+	tx := locales.In(c.Locale())
 	box := ui.Row(c.Key("recorder")).Width(210).Height(40).PaddingX(12).Gap(5).
 		Justify(ui.Center).AlignItems(ui.Center).Radius(11).Background(t.Background).
-		Cursor(ui.CursorPointer).Focusable().FocusRing(false).Label("显示 / 隐藏面板的快捷键")
+		Cursor(ui.CursorPointer).Focusable().FocusRing(false).Label(tx.PanelShortcut())
 	if a.recording {
 		box.Border(1, t.Accent).Shadow(0, 0, 0, 3, t.Accent.Alpha(0.22)).Focus().
 			HandleInput(func(ev ui.InputEvent) bool {
@@ -634,9 +658,9 @@ func (a *app) recorder(c *ui.Context) {
 			}
 			ui.Text(c, "…").FontSize(12).TextColor(t.TextMuted)
 		case a.recording:
-			ui.Text(c, "请按下新的快捷键…").FontSize(12).TextColor(t.Accent)
+			ui.Text(c, tx.PressShortcut()).FontSize(12).TextColor(t.Accent)
 		case a.shortcut == "":
-			ui.Text(c, "未设置，点击录制").FontSize(12).TextColor(t.TextMuted)
+			ui.Text(c, tx.ShortcutUnset()).FontSize(12).TextColor(t.TextMuted)
 		default:
 			for _, key := range keycaps(a.shortcut) {
 				keycap(c, key)

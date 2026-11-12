@@ -5,6 +5,8 @@ import (
 	"runtime"
 	"strings"
 
+	"copied/locales"
+
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 )
@@ -61,6 +63,7 @@ func (a *app) closeTrayMenu() {
 }
 
 func (a *app) trayMenuView(c *ui.Context) {
+	tx := locales.In(c.Locale())
 	t := lightTheme
 	if c.Theme().Dark {
 		t = darkTheme
@@ -75,38 +78,38 @@ func (a *app) trayMenuView(c *ui.Context) {
 	box.Children(func() {
 		ui.Row(c).Height(32).Shrink(0).PaddingX(10).Gap(5).AlignItems(ui.Center).Children(func() {
 			ui.Text(c, "Copied").FontSize(12).FontWeight(650).TextColor(t.TextMuted).Grow(1)
-			status, ink := "记录中", ui.Hex("#119b80")
+			status, ink := tx.Recording(), ui.Hex("#119b80")
 			if a.paused.Load() {
-				status, ink = "已暂停", t.TextMuted
+				status, ink = tx.Paused(), t.TextMuted
 			}
 			ui.Box(c).Size(6, 6).Shrink(0).Radius(3).Background(ink)
 			ui.Text(c, status).FontSize(10.5).TextColor(t.TextMuted).SingleLine()
 		})
 
 		shortcut := menuShortcut(a.shortcut)
-		trayAction(c, "open", iconLogo, "打开面板", shortcut, t.Accent, a.show).Bind(&a.trayFocus)
-		trayAction(c, "shortcut", trayKeyboard, "快捷键设置", "", t.TextMuted, a.openSettings)
+		trayAction(c, "open", iconLogo, tx.OpenPanel(), shortcut, t.Accent, a.show).Bind(&a.trayFocus)
+		trayAction(c, "shortcut", trayKeyboard, tx.Settings(), "", t.TextMuted, a.openSettings)
 		trayDivider(c)
 
-		trayToggle(c, "recording", iconLogo, "剪贴板记录", &a.trayRecording, func() {
+		trayToggle(c, "recording", iconLogo, tx.ClipboardRecording(), &a.trayRecording, func() {
 			a.paused.Store(!a.trayRecording)
 		})
-		trayToggle(c, "login", trayPower, "开机启动", &a.trayLogin, func() {
+		trayToggle(c, "login", trayPower, tx.StartAtLogin(), &a.trayLogin, func() {
 			a.trayError = ""
 			if err := mygo.App.SetOpenAtLogin(a.trayLogin); err != nil {
 				log.Print("setting open at login: ", err)
 				a.trayLogin = mygo.App.OpenAtLogin()
-				a.trayError = "无法更改开机启动，请重试"
+				a.trayError = "loginFailed"
 			}
 		})
 		trayDivider(c)
 
-		trayAction(c, "clear", trayTrash, "清空历史", "保留收藏", t.TextMuted, a.clearHistory)
+		trayAction(c, "clear", trayTrash, tx.ClearHistory(), tx.KeepFavorites(), t.TextMuted, a.clearHistory)
 		if a.trayError != "" {
-			ui.Text(c, a.trayError).FontSize(11).TextColor(t.Danger).Padding(4, 10).SingleLine()
+			ui.Text(c, locales.Catalog.Format(c.Locale(), a.trayError, nil)).FontSize(11).TextColor(t.Danger).Padding(4, 10).SingleLine()
 		}
 		trayDivider(c)
-		trayAction(c, "quit", trayExit, "退出 Copied", "", t.Danger, mygo.App.Quit).TextColor(t.Danger)
+		trayAction(c, "quit", trayExit, tx.QuitCopied(), "", t.Danger, mygo.App.Quit).TextColor(t.Danger)
 	})
 }
 
@@ -173,8 +176,8 @@ func trayToggle(c *ui.Context, key string, icon *ui.SVG, label string, on *bool,
 		}
 		ui.Row(c).Size(32, 18).Shrink(0).Padding(2).Radius(9).Background(ink).
 			AlignItems(ui.Center).Justify(position).Children(func() {
-				ui.Box(c).Size(14, 14).Radius(7).Background(ui.RGB(255, 255, 255))
-			})
+			ui.Box(c).Size(14, 14).Radius(7).Background(ui.RGB(255, 255, 255))
+		})
 	})
 }
 
@@ -185,7 +188,7 @@ func trayDivider(c *ui.Context) {
 func (a *app) clearHistory() {
 	if err := a.store.Clear(); err != nil {
 		log.Print("clearing the history: ", err)
-		a.trayError = "清空失败，请重试"
+		a.trayError = "clearFailed"
 		if a.trayFlyout != nil {
 			a.trayFlyout.Invalidate()
 		}

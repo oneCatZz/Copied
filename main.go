@@ -13,6 +13,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"copied/locales"
+
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 )
@@ -55,14 +57,15 @@ type app struct {
 	panelIdle    *time.Timer
 	panelEpoch   uint64
 
-	clips      []*Clip
-	filter     Filter
-	query      string
-	chosen     int
-	scrollTo   bool // the chosen card scrolls into view in the next frame
-	input      ui.Handle
-	thumbs     map[int64]*thumb // the pictures of the image clips in view, by clip
-	cardMenuID int64            // the clip whose context menu is open; zero closes it
+	clips         []*Clip
+	filter        Filter
+	query         string
+	chosen        int
+	scrollTo      bool // the chosen card scrolls into view in the next frame
+	input         ui.Handle
+	thumbs        map[int64]*thumb // the pictures of the image clips in view, by clip
+	cardMenuID    int64            // the clip whose context menu is open; zero closes it
+	searchSession uint64           // a fresh input identity dismisses its built-in edit menu
 
 	filterFlow filterFlow
 	thumbSlots chan struct{} // bounds background thumbnail reads and decoding
@@ -230,6 +233,7 @@ func (a *app) watch() {
 // with the whole history and the newest clip chosen.
 func (a *app) show() {
 	a.cardMenuID = 0
+	a.searchSession++
 	a.cancelPanelRelease()
 	if a.panel == nil || a.panel.IsDestroyed() {
 		a.newPanel()
@@ -269,13 +273,14 @@ func (a *app) ready() {
 	}
 	a.thumbs = map[int64]*thumb{}
 	a.thumbSlots = make(chan struct{}, 2)
+	a.settings = loadSettings()
+	a.configureLanguage()
 	a.newPanel()
 	mygo.App.OnBeforeQuit(func(*mygo.QuitEvent) {
 		a.quitting = true
 		a.cancelPanelRelease()
 	})
 
-	a.settings = loadSettings()
 	a.registerShortcut()
 	a.setUpTray()
 	mygo.App.OnWillQuit(func(*mygo.QuitEvent) {
@@ -339,6 +344,8 @@ func (a *app) panelHidden(panel *mygo.Window) {
 	}
 	a.settingsOpen = false
 	a.cardMenuID = 0
+	a.searchSession++
+	a.recordError = ""
 	a.clips = nil
 	a.clearThumbs()
 	a.cancelPanelRelease()
@@ -393,7 +400,7 @@ func (a *app) stopRecording(shortcut string) {
 			a.saveSettings()
 			return
 		}
-		a.recordError = "这个快捷键已被占用，换一个试试"
+		a.recordError = "shortcutUnavailable"
 	}
 	if a.shortcut != "" {
 		if err := mygo.GlobalShortcut.Register(a.shortcut, a.toggle); err != nil {
@@ -458,14 +465,15 @@ func (a *app) updateTrayMenu() {
 		}
 		return
 	}
+	tx := locales.In(mygo.App.Locale())
 	a.tray.SetMenu(mygo.NewMenu([]*mygo.MenuItem{
-		{Label: "打开面板", Click: func(*mygo.MenuItem, *mygo.Window) { a.show() }},
-		{Label: "快捷键…", Click: func(*mygo.MenuItem, *mygo.Window) { a.openSettings() }},
+		{Label: tx.OpenPanel(), Click: func(*mygo.MenuItem, *mygo.Window) { a.show() }},
+		{Label: tx.Settings(), Click: func(*mygo.MenuItem, *mygo.Window) { a.openSettings() }},
 		mygo.Separator(),
-		{Label: "暂停记录", Type: mygo.MenuItemCheckbox, Checked: a.paused.Load(), Click: func(it *mygo.MenuItem, _ *mygo.Window) {
+		{Label: tx.PauseRecording(), Type: mygo.MenuItemCheckbox, Checked: a.paused.Load(), Click: func(it *mygo.MenuItem, _ *mygo.Window) {
 			a.paused.Store(it.Checked)
 		}},
-		{Label: "开机启动", Type: mygo.MenuItemCheckbox, Checked: mygo.App.OpenAtLogin(),
+		{Label: tx.StartAtLogin(), Type: mygo.MenuItemCheckbox, Checked: mygo.App.OpenAtLogin(),
 			Click: func(it *mygo.MenuItem, _ *mygo.Window) {
 				if err := mygo.App.SetOpenAtLogin(it.Checked); err != nil {
 					log.Print(err)
@@ -473,9 +481,9 @@ func (a *app) updateTrayMenu() {
 			}},
 		mygo.Separator(),
 		// The pinned clips stay.
-		{Label: "清空历史", Click: func(*mygo.MenuItem, *mygo.Window) { a.clearHistory() }},
+		{Label: tx.ClearHistory(), Click: func(*mygo.MenuItem, *mygo.Window) { a.clearHistory() }},
 		mygo.Separator(),
-		{Label: "退出", Click: func(*mygo.MenuItem, *mygo.Window) { mygo.App.Quit() }},
+		{Label: tx.Quit(), Click: func(*mygo.MenuItem, *mygo.Window) { mygo.App.Quit() }},
 	}))
 }
 
