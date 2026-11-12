@@ -37,6 +37,10 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - name: Prepare patched MyGo
+        run: go run ./scripts/prepare-mygo.go
+      - name: Test MyGo renderer patch
+        run: go test -count=1 github.com/egoist/mygo/internal/scene
       - name: Test
         run: go test -count=1 ./...
       - name: Check MyGo UI lifetimes

@@ -85,17 +85,20 @@ Windows 和 macOS 点击或右键托盘图标打开分组弹层，顶部显示�
 
 ## 开发与构建
 
-需要 [Go](https://go.dev/dl/) 1.27.3 或更高版本，不需要 cgo 和 C 编译器。MyGo 当前固定为 `v0.8.3`，命令行工具通过 `go tool` 使用。
+需要 [Go](https://go.dev/dl/) 1.27.3 或更高版本，不需要 cgo 和 C 编译器。MyGo 当前固定为 `v0.9.0`，命令行工具通过 `go tool` 使用。
 
 ```sh
 git clone https://github.com/oneCatZz/Copied.git
 cd Copied
+go run ./scripts/prepare-mygo.go
 ```
 
 ```sh
 go tool mygo dev      # 开发模式运行，改动代码后自动重新构建
 go tool mygo build    # 打包，输出到 build/
 ```
+
+MyGo 0.9.0 的渲染缓存会残留旧场景中的图片引用。本项目暂时用 `scripts/prepare-mygo.go` 为固定版本应用最小修复：校验上游文件 SHA-256，在 `.mygo-deps/` 生成独立依赖副本，通过本地 `go.work` 使用它，不修改共享模块缓存。首次克隆后必须先运行上面的准备命令；CI 同样执行，并测试补丁。脚本可重复运行，遇到已有的不同 `go.work` 会停止，避免覆盖个人工作区。升级 MyGo 后需重新审查并移除此临时补丁。
 
 第一次运行会下载 SQLite 的动态库。
 

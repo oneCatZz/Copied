@@ -258,10 +258,10 @@ func TestThumbnailPixelsReleaseAfterPresentationWithoutInput(t *testing.T) {
 		builds++
 		image := ui.Image(c, bitmap).Size(64, 64)
 		th.releasePixels(c, image)
+		if builds == 1 && th.pixelsReleased {
+			t.Fatal("pixels released before the first committed frame")
+		}
 	}, 80, 80)
-	if th.pixelsReleased {
-		t.Fatal("pixels released before the first committed frame")
-	}
 	tt.Advance(50 * time.Millisecond)
 	if !th.pixelsReleased || builds > 3 {
 		t.Fatalf("settled image did not release promptly: released=%v, builds=%d", th.pixelsReleased, builds)
