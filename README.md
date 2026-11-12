@@ -85,7 +85,7 @@ Windows 和 macOS 点击或右键托盘图标打开分组弹层，顶部显示�
 
 ## 开发与构建
 
-需要 [Go](https://go.dev/dl/) 1.27.3 或更高版本，不需要 cgo 和 C 编译器。MyGo 当前固定为 `v0.8.3`，命令行工具通过 `go tool` 使用。
+需要 [Go](https://go.dev/dl/) 1.27.3 或更高版本，不需要 cgo 和 C 编译器。MyGo 当前固定为 `v0.9.0`，命令行工具通过 `go tool` 使用。
 
 ```sh
 git clone https://github.com/oneCatZz/Copied.git
