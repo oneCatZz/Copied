@@ -240,6 +240,9 @@ func (a *app) strip(c *ui.Context) {
 		Grow(1).Padding(18, 22, 20, 22).Gap(cardGap).AlignItems(ui.Stretch).Children(func() {
 		for i, clip := range a.clips {
 			if !buildCard(i) {
+				if a.cardMenuID == clip.ID {
+					a.cardMenuID = 0
+				}
 				// Keep geometry and identity, without text layout, shadows
 				// or image work for distant cards.
 				ui.Box(c.Key(cardPlaceholder(clip.ID))).Width(cardWidth).Shrink(0)
@@ -325,24 +328,9 @@ func (a *app) card(c *ui.Context, i int, clip *Clip) (action func()) {
 		a.chosen = i
 		a.input.Focus()
 	}
-	card.PopoverMenu(func(m *ui.Menu) {
-		if m.Item("粘贴").Chosen() {
-			a.paste(i, false)
-		}
-		if clip.Kind != KindImage && clip.Kind != KindFiles && m.Item("粘贴为纯文本").Chosen() {
-			a.paste(i, true)
-		}
-		if m.Item("仅复制").Chosen() {
-			a.copyOnly(i)
-		}
-		m.Separator()
-		if m.Item("收藏").Checked(clip.Pinned).Chosen() {
-			a.togglePin(i)
-		}
-		if m.Item("删除").Danger().Chosen() {
-			a.remove(i)
-		}
-	})
+	if menuAction := a.cardMenu(c, card, i, clip); menuAction != nil {
+		action = menuAction
+	}
 
 	card.Children(func() {
 		ui.Row(c).Padding(12, 14, 10, 12).Gap(8).AlignItems(ui.Center).Children(func() {

@@ -83,10 +83,7 @@ func (a *app) trayMenuView(c *ui.Context) {
 			ui.Text(c, status).FontSize(10.5).TextColor(t.TextMuted).SingleLine()
 		})
 
-		shortcut := strings.Join(keycaps(a.shortcut), "+")
-		if runtime.GOOS == "darwin" {
-			shortcut = strings.Join(keycaps(a.shortcut), "")
-		}
+		shortcut := menuShortcut(a.shortcut)
 		trayAction(c, "open", iconLogo, "打开面板", shortcut, t.Accent, a.show).Bind(&a.trayFocus)
 		trayAction(c, "shortcut", trayKeyboard, "快捷键设置", "", t.TextMuted, a.openSettings)
 		trayDivider(c)
@@ -115,10 +112,16 @@ func (a *app) trayMenuView(c *ui.Context) {
 
 // trayAction returns only this frame's button; callbacks capture app state.
 func trayAction(c *ui.Context, key string, icon *ui.SVG, label, detail string, ink ui.Color, action func()) ui.Element {
+	return menuActionRow(c, ui.ButtonBase(c.Key(key)).OnClick(action), icon, label, detail, ink)
+}
+
+// Both tray actions and context menu items use the same visual treatment;
+// their base widgets retain their own keyboard and accessibility behavior.
+func menuActionRow(c *ui.Context, row ui.Element, icon *ui.SVG, label, detail string, ink ui.Color) ui.Element {
 	t := c.Theme()
-	row := ui.ButtonBase(c.Key(key)).Height(34).PaddingX(10).Gap(9).Justify(ui.Start).
-		Radius(6).Cursor(ui.CursorPointer).Label(label).FocusRing(false).OnClick(action)
-	if row.Hovered() || row.FocusVisible() {
+	row.Height(34).PaddingX(10).Gap(9).Justify(ui.Start).AlignItems(ui.Center).
+		Radius(6).Cursor(ui.CursorPointer).Label(label).FocusRing(false)
+	if row.Hovered() || row.FocusVisible() || row.Highlighted() {
 		row.Background(t.SurfaceHover)
 	}
 	row.Children(func() {
@@ -130,6 +133,22 @@ func trayAction(c *ui.Context, key string, icon *ui.SVG, label, detail string, i
 		}
 	})
 	return row
+}
+
+func menuShortcut(shortcut string) string {
+	caps := keycaps(shortcut)
+	if runtime.GOOS == "darwin" {
+		for i, key := range caps {
+			switch key {
+			case "Enter":
+				caps[i] = "↵"
+			case "Backspace":
+				caps[i] = "⌫"
+			}
+		}
+		return strings.Join(caps, "")
+	}
+	return strings.Join(caps, "+")
 }
 
 // The whole row is a switch, including its label; Space and Enter toggle it.

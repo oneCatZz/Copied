@@ -115,6 +115,12 @@ func runNativeTestApp() {
 			Title: "Copied UI Test", Width: 1200, Height: panelHeight,
 			Hidden: true, Panel: true, Frameless: true, Transparent: true,
 			Vibrancy: mygo.VibrancyGlass, CornerRadius: 18, Content: ui.View(func(c *ui.Context) {
+				if !profileRun {
+					c.OnWindowShortcut(0, ui.KeyF8, func() {
+						a.toggle()
+						time.AfterFunc(100*time.Millisecond, func() { mygo.RunOnMain(a.toggle) })
+					})
+				}
 				if profileRun {
 					c.OnWindowShortcut(0, ui.KeyF9, func() {
 						phase := "initial"
@@ -410,6 +416,39 @@ func TestNativePanelInteractions(t *testing.T) {
 		}
 		return
 	}
+	call("input", map[string]any{"events": []map[string]any{{"type": "click", "button": "right", "x": 120, "y": 180}}}, nil)
+	idle()
+	menuVisible := func() bool {
+		for _, node := range readTree() {
+			if node.Label == "仅复制" && node.Role == "menuItem" {
+				return true
+			}
+		}
+		return false
+	}
+	if !menuVisible() {
+		t.Fatal("native context menu did not open")
+	}
+	capture("native-card-menu")
+	call("input", map[string]any{"events": []map[string]any{{"type": "key", "key": "Escape"}}}, nil)
+	idle()
+	if menuVisible() {
+		t.Fatal("Escape did not dismiss the native context menu")
+	}
+	call("input", map[string]any{"events": []map[string]any{{"type": "click", "button": "right", "x": 120, "y": 180}}}, nil)
+	idle()
+	if !menuVisible() {
+		t.Fatal("native context menu did not reopen after Escape")
+	}
+	// Exercise the same toggle path as the global shortcut, twice inside
+	// the renderer's two-second grace period, without global registrations.
+	call("input", map[string]any{"events": []map[string]any{{"type": "key", "key": "F8"}}}, nil)
+	time.Sleep(200 * time.Millisecond)
+	idle()
+	if menuVisible() {
+		t.Fatal("native context menu survived hiding and reopening the panel")
+	}
+	capture("native-reopened-without-menu")
 	call("input", map[string]any{"events": []map[string]any{{"type": "key", "key": "Escape"}}}, nil)
 	select {
 	case <-done:

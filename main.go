@@ -55,13 +55,14 @@ type app struct {
 	panelIdle    *time.Timer
 	panelEpoch   uint64
 
-	clips    []*Clip
-	filter   Filter
-	query    string
-	chosen   int
-	scrollTo bool // the chosen card scrolls into view in the next frame
-	input    ui.Handle
-	thumbs   map[int64]*thumb // the pictures of the image clips in view, by clip
+	clips      []*Clip
+	filter     Filter
+	query      string
+	chosen     int
+	scrollTo   bool // the chosen card scrolls into view in the next frame
+	input      ui.Handle
+	thumbs     map[int64]*thumb // the pictures of the image clips in view, by clip
+	cardMenuID int64            // the clip whose context menu is open; zero closes it
 
 	filterFlow filterFlow
 	thumbSlots chan struct{} // bounds background thumbnail reads and decoding
@@ -95,6 +96,9 @@ func (a *app) reload() {
 			delete(a.thumbs, id)
 		}
 	}
+	if !listed[a.cardMenuID] {
+		a.cardMenuID = 0
+	}
 }
 
 func (a *app) choose(i int) {
@@ -103,6 +107,7 @@ func (a *app) choose(i int) {
 }
 
 func (a *app) setFilter(f Filter, now time.Time) {
+	a.cardMenuID = 0
 	left, right, _ := a.filterFlow.edges(now)
 	a.filterFlow = filterFlow{left: left, right: right, target: float32(f) * filterChipStride, started: now}
 	a.filter = f
@@ -224,6 +229,7 @@ func (a *app) watch() {
 // show shows the panel along the bottom of the display with the pointer,
 // with the whole history and the newest clip chosen.
 func (a *app) show() {
+	a.cardMenuID = 0
 	a.cancelPanelRelease()
 	if a.panel == nil || a.panel.IsDestroyed() {
 		a.newPanel()
@@ -332,6 +338,7 @@ func (a *app) panelHidden(panel *mygo.Window) {
 		a.stopRecording("")
 	}
 	a.settingsOpen = false
+	a.cardMenuID = 0
 	a.clips = nil
 	a.clearThumbs()
 	a.cancelPanelRelease()
