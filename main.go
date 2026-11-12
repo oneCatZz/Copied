@@ -57,6 +57,8 @@ type app struct {
 	panelIdle    *time.Timer
 	panelEpoch   uint64
 
+	recordCapture string // temporary global shortcut used while recording
+
 	clips         []*Clip
 	filter        Filter
 	query         string
@@ -415,17 +417,36 @@ func (a *app) startRecording() {
 	if a.shortcut != "" {
 		mygo.GlobalShortcut.Unregister(a.shortcut)
 	}
+	if runtime.GOOS == "darwin" {
+		// AppKit takes Cmd+` for window cycling before the recorder sees it.
+		// Reserve it while recording, using the same API as the saved shortcut.
+		const shortcut = "CmdOrCtrl+`"
+		if err := mygo.GlobalShortcut.Register(shortcut, func() {
+			if a.recording {
+				a.stopRecording(shortcut)
+				a.panel.Invalidate()
+			}
+		}); err == nil {
+			a.recordCapture = shortcut
+		}
+	}
 }
 
 // stopRecording takes the shortcut recorded, or keeps the current one
 // when there is none or the system refuses it.
 func (a *app) stopRecording(shortcut string) {
 	a.recording = false
+	if a.recordCapture != "" {
+		mygo.GlobalShortcut.Unregister(a.recordCapture)
+		a.recordCapture = ""
+	}
 	if shortcut != "" && shortcut != a.shortcut {
 		if err := mygo.GlobalShortcut.Register(shortcut, a.toggle); err == nil {
 			a.shortcut, a.settings.Shortcut = shortcut, shortcut
 			a.saveSettings()
 			return
+		} else {
+			log.Printf("shortcut %s: %v", shortcut, err)
 		}
 		a.recordError = "shortcutUnavailable"
 	}

@@ -676,9 +676,14 @@ func (a *app) recorder(c *ui.Context) {
 				if ev.Kind != ui.InputKeyDown {
 					return false
 				}
+				key := ev.Key
+				// Carbon registers Mac shortcuts by physical key, not input source.
+				if runtime.GOOS == "darwin" && ev.PhysicalKey != ui.KeyUnknown {
+					key = ev.PhysicalKey
+				}
 				if ev.Mods == 0 && ev.Key == ui.KeyEscape {
 					a.stopRecording("")
-				} else if shortcut := accelerator(ev.Mods, ev.Key); shortcut != "" {
+				} else if shortcut := accelerator(ev.Mods, key); shortcut != "" {
 					a.stopRecording(shortcut)
 				}
 				return true
