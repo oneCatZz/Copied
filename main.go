@@ -272,6 +272,10 @@ func (a *app) show() {
 	a.panel.SetSize(width, panelHeight)
 	a.panel.SetPosition(d.WorkArea.X+panelMargin, d.WorkArea.Y+d.WorkArea.Height-panelHeight-panelMargin)
 	a.query, a.filter, a.chosen, a.scrollTo = "", FilterAll, 0, true
+	// Reveal alone can leave the first card flush against the viewport edge.
+	// Reset its offset and pending wheel animation so the padding returns too.
+	a.stripScroll = ui.ScrollState{Handle: a.stripScroll.Handle}
+	a.stripWheelTarget = 0
 	a.groupID = 0
 	a.dismissGroupUI()
 	a.filterFlow = filterFlow{}
