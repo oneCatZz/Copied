@@ -61,10 +61,9 @@ func TestSearchMenuPreservesEditingCommands(t *testing.T) {
 	if a.query != "" || tt.Clipboard() != original {
 		t.Fatal("cut did not use the input's selected text")
 	}
-	openSearchMenu(t, tt)
-	if err := tt.ChooseMenuItem("撤销"); err != nil {
-		t.Fatal(err)
-	}
+	// macOS's editing menu omits Undo; the shortcut is supported on both
+	// platforms and still verifies that a menu cut preserves undo history.
+	tt.Key(ui.Cmd, ui.KeyZ)
 	if a.query != original {
 		t.Fatal("editing through the menu lost the undo history")
 	}
