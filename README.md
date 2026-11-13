@@ -6,6 +6,17 @@ Windows 和 macOS 上的剪贴板历史工具，功能参考 [Paste](https://pas
 
 基于 [MyGo](https://github.com/egoist/mygo) 的原生 UI 开发：纯 Go，界面由框架在 GPU 上绘制，不使用 WebView。目前只有本地功能，没有网络同步。
 
+## macOS 安装
+
+当前 macOS 构建**没有 Apple Developer ID 开发者签名，也未经过 Apple 公证**，首次打开需要在系统设置中手动允许。
+
+1. 在本仓库的 [Actions](https://github.com/oneCatZz/Copied/actions/workflows/build.yml) 中，打开一次 **macOS Universal** 打包成功的运行，下载 `Copied-macos-universal` 构建产物并解压，找到 `.dmg` 文件。此版本同时支持 Apple Silicon 和 Intel Mac。
+2. 打开 DMG，将 `Copied.app` 拖入“应用程序”（Applications），再从“应用程序”中双击打开 Copied。
+3. 如果 macOS 提示无法验证开发者或无法检查 App 是否包含恶意软件，在确认下载自本仓库后，打开“系统设置 → 隐私与安全性”，向下滚动到“安全性”，找到 Copied 的拦截提示，点按“仍要打开”（Open Anyway），按系统提示验证并确认“打开”。如果没有显示此按钮，先再次尝试打开 Copied，再返回该设置页面。
+4. 如需自动粘贴，在“系统设置 → 隐私与安全性 → 辅助功能”中允许 Copied；未授权时仍可复制历史记录，再手动按 `⌘V` 粘贴。
+
+手动允许后，后续通常可以直接双击打开。首次打开的系统放行与“辅助功能”授权是两个独立步骤。更多说明见 [Apple 官方指引](https://support.apple.com/zh-cn/102445)。
+
 ## 功能
 
 - **记录**：文本、代码片段、链接、颜色值（如 `#3B82F6`）、图片、文件。
