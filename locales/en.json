@@ -79,5 +79,16 @@
   "keepGrouped": "Keep grouped items",
   "cancel": "Cancel",
   "save": "Save",
-  "colors": "Colors"
+  "colors": "Colors",
+  "addToStack": "Add to Stack",
+  "removeFromStack": "Remove from Stack",
+  "stackCount": "Stack · {count, number}",
+  "clearStack": "Clear Stack",
+  "pasteNext": "Paste next",
+  "pickedCount": "{count, number} selected",
+  "pasteAll": "Paste all",
+  "copyAll": "Copy all",
+  "clearSelection": "Clear selection",
+  "multiSelect": "Multi-select",
+  "click": "Click"
 }

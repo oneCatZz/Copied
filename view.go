@@ -41,15 +41,25 @@ func (a *app) key(mods ui.Modifiers, key ui.Key) bool {
 		}
 		a.cycleGroup(mods == ui.Shift)
 	case mods == 0 && key == ui.KeyEscape:
+		if len(a.picked) > 0 {
+			a.picked = nil
+			return true
+		}
 		if a.query == "" {
 			return false // left to the panel, which hides
 		}
 		a.query, a.chosen, a.scrollTo = "", 0, true
 		a.reload()
 	case mods == 0 && key == ui.KeyLeft:
+		a.picked = nil
 		a.choose(a.chosen - 1)
 	case mods == 0 && key == ui.KeyRight:
+		a.picked = nil
 		a.choose(a.chosen + 1)
+	case mods == ui.Shift && key == ui.KeyLeft:
+		a.extendPick(-1)
+	case mods == ui.Shift && key == ui.KeyRight:
+		a.extendPick(1)
 	case mods == 0 && key == ui.KeyEnter:
 		a.paste(a.chosen, false)
 	case mods == ui.Shift && key == ui.KeyEnter:
@@ -60,6 +70,8 @@ func (a *app) key(mods ui.Modifiers, key ui.Key) bool {
 		a.remove(a.chosen)
 	case mods == ui.Cmd && key == ui.KeyP:
 		a.openClipGroups(a.chosen)
+	case mods == ui.Cmd && key == ui.KeyS:
+		a.toggleStack(a.chosen)
 	case mods == ui.Cmd && key == ui.KeyComma:
 		a.dismissGroupUI()
 		a.settingsOpen = true
@@ -112,10 +124,11 @@ func (a *app) view(c *ui.Context) {
 		}
 		combos := []combo{
 			{0, ui.KeyTab}, {ui.Shift, ui.KeyTab},
-			{0, ui.KeyLeft}, {0, ui.KeyRight}, {0, ui.KeyEnter}, {ui.Shift, ui.KeyEnter},
-			{ui.Cmd, ui.KeyEnter}, {ui.Cmd, ui.KeyBackspace}, {ui.Cmd, ui.KeyP}, {ui.Cmd, ui.KeyComma},
+			{0, ui.KeyLeft}, {0, ui.KeyRight}, {ui.Shift, ui.KeyLeft}, {ui.Shift, ui.KeyRight},
+			{0, ui.KeyEnter}, {ui.Shift, ui.KeyEnter},
+			{ui.Cmd, ui.KeyEnter}, {ui.Cmd, ui.KeyBackspace}, {ui.Cmd, ui.KeyP}, {ui.Cmd, ui.KeyS}, {ui.Cmd, ui.KeyComma},
 		}
-		if a.query != "" {
+		if a.query != "" || len(a.picked) > 0 {
 			combos = append(combos, combo{0, ui.KeyEscape})
 		}
 		for _, digit := range digitKeys {
@@ -342,6 +355,9 @@ func (a *app) card(c *ui.Context, i int, clip *Clip) (action func()) {
 		lift = 8
 		card.Border(1, t.Accent).Shadow(0, 0, 0, 2, t.Accent.Alpha(0.9)).
 			Shadow(0, 18, 36, -10, t.Accent.Alpha(0.45)).Shadow(0, 10, 24, -8, shade.Alpha(depth))
+	case a.pickOrder(clip.ID) > 0:
+		lift = 3
+		card.Border(1, t.Accent).Shadow(0, 0, 0, 1, t.Accent.Alpha(0.5)).Shadow(0, 10, 24, -8, shade.Alpha(depth))
 	case card.Hovered():
 		lift = 3
 		card.Border(1, t.TextMuted.Alpha(0.45)).Shadow(0, 10, 24, -8, shade.Alpha(depth))
@@ -366,7 +382,7 @@ func (a *app) card(c *ui.Context, i int, clip *Clip) (action func()) {
 	if card.DoubleClicked() {
 		action = func() { a.paste(i, false) }
 	} else if card.Clicked() {
-		a.chosen = i
+		a.clickCard(i, card.ClickModifiers())
 		a.input.Focus()
 	}
 	if menuAction := a.cardMenu(c, card, i, clip); menuAction != nil {
@@ -375,13 +391,25 @@ func (a *app) card(c *ui.Context, i int, clip *Clip) (action func()) {
 
 	card.Children(func() {
 		ui.Row(c).Padding(12, 14, 10, 12).Gap(8).AlignItems(ui.Center).Children(func() {
-			ui.Box(c).Size(24, 24).Center().Radius(8).Background(hue.Alpha(0.16)).Children(func() {
-				ui.Icon(c, kindIcon(clip.Kind)).FontSize(13).TextColor(hue)
-			})
+			if a.pickOrder(clip.ID) > 0 {
+				ui.Box(c).Size(24, 24).Center().Radius(8).Background(t.Accent).Description(tx.PickedCount(len(a.picked))).Children(func() {
+					ui.Icon(c, filterCheckIcon).FontSize(13).TextColor(ui.RGB(255, 255, 255))
+				})
+			} else {
+				ui.Box(c).Size(24, 24).Center().Radius(8).Background(hue.Alpha(0.16)).Children(func() {
+					ui.Icon(c, kindIcon(clip.Kind)).FontSize(13).TextColor(hue)
+				})
+			}
 			ui.Text(c, kindLabel(clip.Kind, c.Locale())).FontSize(12).FontWeight(600)
 			ui.Spacer(c)
 			if len(clip.GroupIDs) > 0 || clip.Pinned {
 				ui.Icon(c, iconFolder).FontSize(12).TextColor(kindColor(KindFiles, t.Dark)).Description(tx.Groups())
+			}
+			if n := a.stackOrder(clip.ID); n > 0 {
+				ui.Row(c).Height(18).MinWidth(18).PaddingX(5).Justify(ui.Center).AlignItems(ui.Center).Radius(9).
+					Background(t.Accent).Description(tx.StackCount(n)).Children(func() {
+					ui.Text(c, fmt.Sprint(n)).FontSize(10.5).FontWeight(650).TextColor(ui.RGB(255, 255, 255))
+				})
 			}
 			ui.Text(c, ago(clip.UsedAt, c.Locale())).FontSize(11).TextColor(t.TextMuted)
 		})
@@ -601,14 +629,29 @@ func (a *app) footer(c *ui.Context) {
 		})
 	}
 	ui.Row(c).Padding(0, 22, 16, 22).Gap(18).AlignItems(ui.Center).Children(func() {
+		if len(a.picked) > 1 {
+			a.batchHints(c, hint)
+		}
 		for i, h := range hints {
+			if len(a.picked) > 1 {
+				break
+			}
 			if width < 900 && (i == 2 || i == 3 || i == 5) {
 				continue
 			}
 			hint(h.keys, h.label)
+			if i == 4 && width >= 1100 && len(a.stack) == 0 {
+				hint([]string{cmd, "S"}, tx.AddToStack())
+			}
+			if i == 4 && width >= 1300 {
+				hint([]string{cmd, tx.Click()}, tx.MultiSelect())
+			}
 		}
 		ui.Spacer(c)
-		if a.shortcut != "" && width >= 1100 {
+		if len(a.stack) > 0 {
+			a.stackStatus(c, width)
+		}
+		if a.shortcut != "" && width >= 1100 && (len(a.stack) == 0 || width >= 1400) {
 			hint(keycaps(a.shortcut), tx.ShowHide())
 		}
 	})

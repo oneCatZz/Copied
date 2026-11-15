@@ -13,6 +13,7 @@ var (
 	procSetForegroundWindow        = user32.NewProc("SetForegroundWindow")
 	procIsWindow                   = user32.NewProc("IsWindow")
 	procSendInput                  = user32.NewProc("SendInput")
+	procGetAsyncKeyState           = user32.NewProc("GetAsyncKeyState")
 )
 
 // clipboardSeq returns a number that changes with the clipboard's content.
@@ -46,6 +47,25 @@ type keyboardInput struct {
 	_     uint32
 	extra uintptr
 	_     [8]byte
+}
+
+// waitForModifiersUp waits, a second at most, for the keys of a global
+// shortcut to be let go: Alt held would turn the Ctrl+V sent into another key.
+func waitForModifiersUp() {
+	keys := []uintptr{0x10, 0x11, 0x12, 0x5B, 0x5C, vkV} // Shift, Ctrl, Alt, both Win, V
+	for deadline := time.Now().Add(time.Second); time.Now().Before(deadline); {
+		held := false
+		for _, vk := range keys {
+			if state, _, _ := procGetAsyncKeyState.Call(vk); state&0x8000 != 0 {
+				held = true
+				break
+			}
+		}
+		if !held {
+			return
+		}
+		time.Sleep(15 * time.Millisecond)
+	}
 }
 
 // pasteInto gives the keyboard to the window the panel was shown over and

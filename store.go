@@ -224,6 +224,12 @@ func (s *Store) Get(id int64) (*Clip, error) {
 	return c, nil
 }
 
+// Has reports whether a clip is still in the history.
+func (s *Store) Has(id int64) bool {
+	rows, err := s.db.Query(context.Background(), `SELECT 1 FROM clips WHERE id = ?`, id)
+	return err == nil && len(rows.Values) > 0
+}
+
 // Thumb returns the small picture of an image clip, a PNG.
 func (s *Store) Thumb(id int64) []byte {
 	rows, err := s.db.Query(context.Background(), `SELECT thumb FROM clips WHERE id = ?`, id)
