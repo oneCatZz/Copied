@@ -15,7 +15,7 @@ import (
 
 type fakeShortcuts struct {
 	bindings map[string]func()
-	busy map[string]bool
+	busy     map[string]bool
 }
 
 func newFakeShortcuts() *fakeShortcuts {
@@ -32,7 +32,9 @@ func (f *fakeShortcuts) Register(key string, fn func()) error {
 }
 
 func (f *fakeShortcuts) Unregister(key string) { delete(f.bindings, shortcutSignature(key)) }
-func (f *fakeShortcuts) IsRegistered(key string) bool { return f.bindings[shortcutSignature(key)] != nil }
+func (f *fakeShortcuts) IsRegistered(key string) bool {
+	return f.bindings[shortcutSignature(key)] != nil
+}
 
 func shortcutTestApp() (*app, *fakeShortcuts) {
 	keys := newFakeShortcuts()
@@ -80,7 +82,7 @@ func TestStackShortcutConflictsPreserveCurrentBindings(t *testing.T) {
 	keys.busy[shortcutSignature(busy)] = true
 	for _, tc := range []struct {
 		shortcut string
-		stack bool
+		stack    bool
 		errorKey string
 	}{
 		{a.shortcut, true, "shortcutConflict"},
@@ -151,6 +153,7 @@ func TestStackShortcutSettingsLayout(t *testing.T) {
 					tt := ui.NewTester(a.settingsDialog, width, panelHeight)
 					tt.SetLocale(tag)
 					tt.SetDark(dark)
+					saveUIArtifact(t, tt, fmt.Sprintf("stack-settings-%d-%s-dark-%v", width, tag, dark))
 					tx := locales.In(tag)
 					for _, label := range []string{tx.PanelShortcut(), locales.Catalog.Format(tag, "stackShortcut", nil), locales.Catalog.Format(tag, "resetStackShortcut", nil), tx.Done()} {
 						r, ok := tt.Find(label)
@@ -161,7 +164,6 @@ func TestStackShortcutSettingsLayout(t *testing.T) {
 					if !tt.HasText("X") || !tt.HasText(locales.Catalog.Format(tag, "stackShortcutReserved", nil)) {
 						t.Fatal("custom shortcut or localized error was not displayed")
 					}
-					saveUIArtifact(t, tt, fmt.Sprintf("stack-settings-%d-%s-dark-%v", width, tag, dark))
 				})
 			}
 		}

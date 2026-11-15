@@ -434,13 +434,13 @@ func (a *app) preview(c *ui.Context, i int, clip *Clip, hue ui.Color) {
 	case KindCode:
 		ui.Column(c).Grow(1).Basis(0).Margin(0, 12).Padding(10).Radius(10).
 			Background(t.SurfaceHover).Children(func() {
-				// Padding keeps the text inside the rounded surface; a simple
-				// rectangular clip avoids a moving rounded coverage mask.
-				ui.Box(c).Fill().Clip().Children(func() {
-					ui.RichText(c, clip.codePreview().styledSpans(t)...).
-						Font("monospace").FontSize(11.5).LineHeight(1.55).NoWrap().MaxLines(8)
-				})
+			// Padding keeps the text inside the rounded surface; a simple
+			// rectangular clip avoids a moving rounded coverage mask.
+			ui.Box(c).Fill().Clip().Children(func() {
+				ui.RichText(c, clip.codePreview().styledSpans(t)...).
+					Font("monospace").FontSize(11.5).LineHeight(1.55).NoWrap().MaxLines(8)
 			})
+		})
 	case KindImage:
 		// Pictures are read as their cards come near the view.
 		box := ui.Box(c).Grow(1).Basis(0).Margin(0, 12).Radius(10).Background(t.SurfaceHover)
@@ -672,11 +672,11 @@ func (a *app) settingsDialog(c *ui.Context) {
 			})
 
 			for _, stack := range []bool{false, true} {
-				title, hint, resetLabel := tx.ShowHidePanel(), tx.ShowHidePanelHint(), locales.Catalog.Format(c.Locale(), "resetPanelShortcut", nil)
+				title, hint, resetLabel := tx.ShowHidePanel(), tx.ShowHidePanelHint(), tx.ResetPanelShortcut()
 				if stack {
-					title = locales.Catalog.Format(c.Locale(), "stackShortcut", nil)
-					hint = locales.Catalog.Format(c.Locale(), "stackShortcutHint", nil)
-					resetLabel = locales.Catalog.Format(c.Locale(), "resetStackShortcut", nil)
+					title = tx.StackShortcut()
+					hint = tx.StackShortcutHint()
+					resetLabel = tx.ResetStackShortcut()
 				}
 				ui.Row(c.Key(stack)).Gap(8).AlignItems(ui.Center).Children(func() {
 					ui.Column(c).Grow(1).Basis(0).Gap(2).Children(func() {
@@ -720,7 +720,7 @@ func (a *app) recorder(c *ui.Context, stack bool) {
 	tx := locales.In(c.Locale())
 	label, shortcut := tx.PanelShortcut(), a.shortcut
 	if stack {
-		label, shortcut = locales.Catalog.Format(c.Locale(), "stackShortcut", nil), a.stackShortcut()
+		label, shortcut = tx.StackShortcut(), a.stackShortcut()
 	}
 	recording := a.recording && a.recordingStack == stack
 	box := ui.Row(c.Key("recorder")).Width(210).Height(40).PaddingX(12).Gap(5).

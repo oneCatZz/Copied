@@ -943,3 +943,63 @@ func Click() string { return In(i18n.Locale()).Click() }
 func (msgs Messages) Click() string {
 	return Catalog.Format(msgs.locale, "click", nil)
 }
+
+// StackShortcut says "Stack paste shortcut"
+// in the language the app shows.
+func StackShortcut() string { return In(i18n.Locale()).StackShortcut() }
+
+// StackShortcut says "Stack paste shortcut"
+// in the language of msgs.
+func (msgs Messages) StackShortcut() string {
+	return Catalog.Format(msgs.locale, "stackShortcut", nil)
+}
+
+// StackShortcutHint says "Paste the next Stack item in any app"
+// in the language the app shows.
+func StackShortcutHint() string { return In(i18n.Locale()).StackShortcutHint() }
+
+// StackShortcutHint says "Paste the next Stack item in any app"
+// in the language of msgs.
+func (msgs Messages) StackShortcutHint() string {
+	return Catalog.Format(msgs.locale, "stackShortcutHint", nil)
+}
+
+// ResetPanelShortcut says "Reset panel shortcut"
+// in the language the app shows.
+func ResetPanelShortcut() string { return In(i18n.Locale()).ResetPanelShortcut() }
+
+// ResetPanelShortcut says "Reset panel shortcut"
+// in the language of msgs.
+func (msgs Messages) ResetPanelShortcut() string {
+	return Catalog.Format(msgs.locale, "resetPanelShortcut", nil)
+}
+
+// ResetStackShortcut says "Reset Stack shortcut"
+// in the language the app shows.
+func ResetStackShortcut() string { return In(i18n.Locale()).ResetStackShortcut() }
+
+// ResetStackShortcut says "Reset Stack shortcut"
+// in the language of msgs.
+func (msgs Messages) ResetStackShortcut() string {
+	return Catalog.Format(msgs.locale, "resetStackShortcut", nil)
+}
+
+// ShortcutConflict says "Panel and Stack shortcuts must be different."
+// in the language the app shows.
+func ShortcutConflict() string { return In(i18n.Locale()).ShortcutConflict() }
+
+// ShortcutConflict says "Panel and Stack shortcuts must be different."
+// in the language of msgs.
+func (msgs Messages) ShortcutConflict() string {
+	return Catalog.Format(msgs.locale, "shortcutConflict", nil)
+}
+
+// StackShortcutReserved says "Choose another shortcut. Ctrl/Command+V is reserved for pasting."
+// in the language the app shows.
+func StackShortcutReserved() string { return In(i18n.Locale()).StackShortcutReserved() }
+
+// StackShortcutReserved says "Choose another shortcut. Ctrl/Command+V is reserved for pasting."
+// in the language of msgs.
+func (msgs Messages) StackShortcutReserved() string {
+	return Catalog.Format(msgs.locale, "stackShortcutReserved", nil)
+}

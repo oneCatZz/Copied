@@ -49,15 +49,15 @@ type app struct {
 	trayLogin     bool
 	trayError     string
 
-	shownAt      time.Time     // when the panel last showed, for its entrance
-	since        time.Duration // since then, in the frame being built
-	settingsOpen bool          // the settings dialog shows
-	recording    bool          // the dialog waits for the keys of a new shortcut
-	recordingStack bool        // the recorder edits the stack shortcut
-	recordError  string
-	quitting     bool // the app quits: the panel closes rather than hides
-	panelIdle    *time.Timer
-	panelEpoch   uint64
+	shownAt        time.Time     // when the panel last showed, for its entrance
+	since          time.Duration // since then, in the frame being built
+	settingsOpen   bool          // the settings dialog shows
+	recording      bool          // the dialog waits for the keys of a new shortcut
+	recordingStack bool          // the recorder edits the stack shortcut
+	recordError    string
+	quitting       bool // the app quits: the panel closes rather than hides
+	panelIdle      *time.Timer
+	panelEpoch     uint64
 
 	recordCapture string // temporary global shortcut used while recording
 
@@ -92,8 +92,8 @@ type app struct {
 	thumbClock uint64
 	thumbLimit int
 
-	stack     []int64 // clips to paste in turn, first to last
-	stackKeys string  // the stack accelerator currently registered
+	stack     []int64          // clips to paste in turn, first to last
+	stackKeys string           // the stack accelerator currently registered
 	shortcuts shortcutRegistry // nil uses the native global shortcut registry
 
 	stackPastes chan stackPaste // pastes of the stack, in turn (queueStackPaste)
@@ -456,9 +456,9 @@ func (a *app) startRecording(stack bool) {
 		if err := a.globalShortcuts().Register(shortcut, func() {
 			if a.recording {
 				a.stopRecording(shortcut)
-					if a.panel != nil {
-						a.panel.Invalidate()
-					}
+				if a.panel != nil {
+					a.panel.Invalidate()
+				}
 			}
 		}); err == nil {
 			a.recordCapture = shortcut

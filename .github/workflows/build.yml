@@ -42,22 +42,22 @@ jobs:
       - name: Generate locale catalog
         run: |
           go tool mygo generate
-          git diff -- locales/catalog_gen.go
-          gofmt -d main.go settings.go shortcuts.go stack.go view.go shortcuts_test.go
+          git diff --exit-code -- locales/catalog_gen.go
       - name: Test MyGo renderer patch
         run: go test -count=1 github.com/egoist/mygo/internal/scene
-      - name: Test
-        run: go test -count=1 ./...
       - name: Preview shortcut settings
         env:
           COPIED_TEST_ARTIFACTS: build/ui-preview
         run: go test -count=1 -run '^TestStackShortcutSettingsLayout$' .
       - name: Upload shortcut settings preview
+        if: always()
         uses: actions/upload-artifact@v6
         with:
           name: Settings-preview-${{ matrix.artifact }}
           path: build/ui-preview/*.png
           if-no-files-found: error
+      - name: Test
+        run: go test -count=1 ./...
       - name: Test Windows native paste
         if: runner.os == 'Windows'
         env:
