@@ -674,7 +674,7 @@ func (a *app) settingsDialog(c *ui.Context) {
 			for _, stack := range []bool{false, true} {
 				title, hint, resetLabel := tx.ShowHidePanel(), tx.ShowHidePanelHint(), tx.ResetPanelShortcut()
 				if stack {
-					title = tx.StackShortcut()
+					title = "Stack · " + tx.PasteNext()
 					hint = tx.StackShortcutHint()
 					resetLabel = tx.ResetStackShortcut()
 				}
