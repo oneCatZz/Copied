@@ -59,7 +59,7 @@ macOS 构建使用固定的自签名证书“Copied Code Signing”签名，升�
 | `Ctrl/⌘+Backspace` | 删除 |
 | `Esc` | 取消多选；清空搜索；搜索为空时关闭面板 |
 
-Stack 非空时，`Ctrl+Alt+V`（macOS 为 `⌘⌥V`）在任意应用中粘贴 Stack 的下一条。
+Stack 非空时，默认用 `Ctrl+Alt+V`（macOS 为 `⌘⌥V`）在任意应用中粘贴 Stack 的下一条。可在设置中点击“Stack 粘贴快捷键”录制新组合键，立即生效并在重启后保留；旁边的“恢复默认”只重置 Stack 快捷键。面板和 Stack 快捷键必须不同，`Ctrl/⌘+V` 保留给普通粘贴；组合键被其他程序占用时会提示并保留原设置。录制时按 `Esc` 取消。
 
 鼠标：单击选中，双击粘贴，右键打开菜单；`Ctrl/⌘+点击`、`Shift+点击` 多选。
 

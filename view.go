@@ -657,40 +657,48 @@ func (a *app) footer(c *ui.Context) {
 	})
 }
 
-// settingsDialog sets the shortcut that shows the panel: a click on the
-// shortcut waits for the keys of another.
+// settingsDialog edits the panel and stack shortcuts and the language.
 func (a *app) settingsDialog(c *ui.Context) {
 	t := c.Theme()
 	tx := locales.In(c.Locale())
 	ui.DialogBase(c, &a.settingsOpen, func(backdrop, panel ui.Element) {
 		width, height := c.Size()
 		backdrop.Background(ui.RGBA(0, 0, 0, 0.4))
-		popupSurface(c, panel).Padding(18).Radius(12).MaxWidth(width - 32).MaxHeight(height - 24)
-		ui.Column(c).Width(440).MaxWidth(max(0, width-68)).Gap(16).Children(func() {
+		popupSurface(c, panel).Padding(16).Radius(12).MaxWidth(width - 32).MaxHeight(height - 24)
+		ui.Column(c).Width(560).MaxWidth(max(0, width-64)).Gap(12).Children(func() {
 			ui.Column(c).Gap(4).Children(func() {
 				ui.Text(c, tx.Settings()).FontSize(16).FontWeight(650)
 				ui.Text(c, tx.ShortcutInstructions()).FontSize(12).TextColor(t.TextMuted)
 			})
 
-			ui.Row(c).Gap(12).AlignItems(ui.Center).Children(func() {
-				ui.Column(c).Grow(1).Gap(2).Children(func() {
-					ui.Text(c, tx.ShowHidePanel()).FontSize(13).FontWeight(550)
-					ui.Text(c, tx.ShowHidePanelHint()).FontSize(11.5).TextColor(t.TextMuted)
+			for _, stack := range []bool{false, true} {
+				title, hint, resetLabel := tx.ShowHidePanel(), tx.ShowHidePanelHint(), locales.Catalog.Format(c.Locale(), "resetPanelShortcut", nil)
+				if stack {
+					title = locales.Catalog.Format(c.Locale(), "stackShortcut", nil)
+					hint = locales.Catalog.Format(c.Locale(), "stackShortcutHint", nil)
+					resetLabel = locales.Catalog.Format(c.Locale(), "resetStackShortcut", nil)
+				}
+				ui.Row(c.Key(stack)).Gap(8).AlignItems(ui.Center).Children(func() {
+					ui.Column(c).Grow(1).Basis(0).Gap(2).Children(func() {
+						ui.Text(c, title).FontSize(13).FontWeight(550)
+						ui.Text(c, hint).FontSize(11.5).TextColor(t.TextMuted)
+					})
+					a.recorder(c, stack)
+					dialogButton(c, "reset-shortcut", tx.ResetDefault(), false).Label(resetLabel).OnClick(func() {
+						if stack {
+							a.resetStackShortcut()
+						} else {
+							a.resetShortcut()
+						}
+					})
 				})
-				a.recorder(c)
-			})
+			}
 			if a.recordError != "" {
 				ui.Text(c, locales.Catalog.Format(c.Locale(), a.recordError, nil)).FontSize(12).TextColor(t.Danger)
 			}
 			a.languageOptions(c)
 
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-				if dialogButton(c, "reset-shortcut", tx.ResetDefault(), false).Clicked() {
-					if a.recording {
-						a.stopRecording("")
-					}
-					a.resetShortcut()
-				}
 				ui.Spacer(c)
 				if dialogButton(c, "finish-settings", tx.Done(), true).Clicked() {
 					a.settingsOpen = false
@@ -707,13 +715,18 @@ func (a *app) settingsDialog(c *ui.Context) {
 }
 
 // recorder shows the shortcut, or the keys held as it waits for a new one.
-func (a *app) recorder(c *ui.Context) {
+func (a *app) recorder(c *ui.Context, stack bool) {
 	t := c.Theme()
 	tx := locales.In(c.Locale())
+	label, shortcut := tx.PanelShortcut(), a.shortcut
+	if stack {
+		label, shortcut = locales.Catalog.Format(c.Locale(), "stackShortcut", nil), a.stackShortcut()
+	}
+	recording := a.recording && a.recordingStack == stack
 	box := ui.Row(c.Key("recorder")).Width(210).Height(40).PaddingX(12).Gap(5).
 		Justify(ui.Center).AlignItems(ui.Center).Radius(11).Background(t.Background).
-		Cursor(ui.CursorPointer).Focusable().FocusRing(false).Label(tx.PanelShortcut())
-	if a.recording {
+		Cursor(ui.CursorPointer).Focusable().FocusRing(false).Label(label)
+	if recording {
 		box.Border(1, t.Accent).Shadow(0, 0, 0, 3, t.Accent.Alpha(0.22)).Focus().
 			HandleInput(func(ev ui.InputEvent) bool {
 				if ev.Kind != ui.InputKeyDown {
@@ -737,22 +750,22 @@ func (a *app) recorder(c *ui.Context) {
 			box.Border(1, t.TextMuted.Alpha(0.6))
 		}
 		if box.Clicked() {
-			a.startRecording()
+			a.startRecording(stack)
 		}
 	}
 	box.Transition(fadeMotion).Children(func() {
 		switch held := keycaps(strings.Join(modifierNames(c.Modifiers()), "+")); {
-		case a.recording && len(held) > 0:
+		case recording && len(held) > 0:
 			for _, key := range held {
 				keycap(c, key)
 			}
 			ui.Text(c, "…").FontSize(12).TextColor(t.TextMuted)
-		case a.recording:
+		case recording:
 			ui.Text(c, tx.PressShortcut()).FontSize(12).TextColor(t.Accent)
-		case a.shortcut == "":
+		case shortcut == "":
 			ui.Text(c, tx.ShortcutUnset()).FontSize(12).TextColor(t.TextMuted)
 		default:
-			for _, key := range keycaps(a.shortcut) {
+			for _, key := range keycaps(shortcut) {
 				keycap(c, key)
 			}
 		}

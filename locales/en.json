@@ -90,5 +90,11 @@
   "copyAll": "Copy all",
   "clearSelection": "Clear selection",
   "multiSelect": "Multi-select",
-  "click": "Click"
+  "click": "Click",
+  "stackShortcut": "Stack paste shortcut",
+  "stackShortcutHint": "Paste the next Stack item in any app",
+  "resetPanelShortcut": "Reset panel shortcut",
+  "resetStackShortcut": "Reset Stack shortcut",
+  "shortcutConflict": "Panel and Stack shortcuts must be different.",
+  "stackShortcutReserved": "Choose another shortcut. Ctrl/Command+V is reserved for pasting."
 }

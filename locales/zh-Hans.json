@@ -90,5 +90,11 @@
   "copyAll": "批量复制",
   "clearSelection": "取消选择",
   "multiSelect": "多选",
-  "click": "点击"
+  "click": "点击",
+  "stackShortcut": "Stack 粘贴快捷键",
+  "stackShortcutHint": "在任意应用粘贴 Stack 的下一条",
+  "resetPanelShortcut": "恢复面板默认快捷键",
+  "resetStackShortcut": "恢复 Stack 默认快捷键",
+  "shortcutConflict": "面板和 Stack 不能使用相同的快捷键。",
+  "stackShortcutReserved": "请使用其他组合键，Ctrl/⌘+V 用于普通粘贴。"
 }
