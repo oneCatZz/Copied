@@ -49,14 +49,15 @@ type app struct {
 	trayLogin     bool
 	trayError     string
 
-	shownAt      time.Time     // when the panel last showed, for its entrance
-	since        time.Duration // since then, in the frame being built
-	settingsOpen bool          // the settings dialog shows
-	recording    bool          // the dialog waits for the keys of a new shortcut
-	recordError  string
-	quitting     bool // the app quits: the panel closes rather than hides
-	panelIdle    *time.Timer
-	panelEpoch   uint64
+	shownAt        time.Time     // when the panel last showed, for its entrance
+	since          time.Duration // since then, in the frame being built
+	settingsOpen   bool          // the settings dialog shows
+	recording      bool          // the dialog waits for the keys of a new shortcut
+	recordingStack bool          // the recorder edits the stack shortcut
+	recordError    string
+	quitting       bool // the app quits: the panel closes rather than hides
+	panelIdle      *time.Timer
+	panelEpoch     uint64
 
 	recordCapture string // temporary global shortcut used while recording
 
@@ -91,8 +92,9 @@ type app struct {
 	thumbClock uint64
 	thumbLimit int
 
-	stack     []int64 // clips to paste in turn, first to last
-	stackKeys bool    // stackShortcut is registered
+	stack     []int64          // clips to paste in turn, first to last
+	stackKeys string           // the stack accelerator currently registered
+	shortcuts shortcutRegistry // nil uses the native global shortcut registry
 
 	stackPastes chan stackPaste // pastes of the stack, in turn (queueStackPaste)
 
@@ -422,7 +424,10 @@ func (a *app) registerShortcut() {
 	}
 	a.shortcut = ""
 	for _, s := range candidates {
-		if err := mygo.GlobalShortcut.Register(s, a.toggle); err == nil {
+		if sameShortcut(s, a.stackShortcut()) {
+			continue
+		}
+		if err := a.globalShortcuts().Register(s, a.toggle); err == nil {
 			a.shortcut = s
 			return
 		} else {
@@ -434,20 +439,26 @@ func (a *app) registerShortcut() {
 // startRecording waits for the keys of a new shortcut. The current one
 // is let go meanwhile, so that pressing it again keeps it rather than
 // hiding the panel.
-func (a *app) startRecording() {
+func (a *app) startRecording(stack bool) {
+	if a.recording {
+		a.stopRecording("")
+	}
 	a.recording, a.recordError = true, ""
+	a.recordingStack = stack
 	if a.shortcut != "" {
-		mygo.GlobalShortcut.Unregister(a.shortcut)
+		a.globalShortcuts().Unregister(a.shortcut)
 	}
 	a.syncStackShortcut()
 	if runtime.GOOS == "darwin" {
 		// AppKit takes Cmd+` for window cycling before the recorder sees it.
 		// Reserve it while recording, using the same API as the saved shortcut.
 		const shortcut = "CmdOrCtrl+`"
-		if err := mygo.GlobalShortcut.Register(shortcut, func() {
+		if err := a.globalShortcuts().Register(shortcut, func() {
 			if a.recording {
 				a.stopRecording(shortcut)
-				a.panel.Invalidate()
+				if a.panel != nil {
+					a.panel.Invalidate()
+				}
 			}
 		}); err == nil {
 			a.recordCapture = shortcut
@@ -458,37 +469,31 @@ func (a *app) startRecording() {
 // stopRecording takes the shortcut recorded, or keeps the current one
 // when there is none or the system refuses it.
 func (a *app) stopRecording(shortcut string) {
+	stack := a.recordingStack
 	a.recording = false
-	defer a.syncStackShortcut()
+	a.recordingStack = false
+	defer a.resumeShortcuts()
 	if a.recordCapture != "" {
-		mygo.GlobalShortcut.Unregister(a.recordCapture)
+		a.globalShortcuts().Unregister(a.recordCapture)
 		a.recordCapture = ""
 	}
-	if shortcut != "" && shortcut != a.shortcut {
-		if err := mygo.GlobalShortcut.Register(shortcut, a.toggle); err == nil {
-			a.shortcut, a.settings.Shortcut = shortcut, shortcut
-			a.saveSettings()
-			return
-		} else {
-			log.Printf("shortcut %s: %v", shortcut, err)
-		}
-		a.recordError = "shortcutUnavailable"
-	}
-	if a.shortcut != "" {
-		if err := mygo.GlobalShortcut.Register(a.shortcut, a.toggle); err != nil {
-			log.Printf("shortcut %s: %v", a.shortcut, err)
-		}
+	if shortcut != "" && a.changeShortcut(shortcut, stack) {
+		a.saveSettings()
 	}
 }
 
 // resetShortcut goes back to the default shortcut.
 func (a *app) resetShortcut() {
-	if a.shortcut != "" {
-		mygo.GlobalShortcut.Unregister(a.shortcut)
+	if a.recording {
+		a.stopRecording("")
 	}
-	a.settings.Shortcut, a.recordError = "", ""
-	a.registerShortcut()
-	a.saveSettings()
+	for _, shortcut := range defaultShortcuts {
+		if a.changeShortcut(shortcut, false) {
+			a.settings.Shortcut = ""
+			a.saveSettings()
+			return
+		}
+	}
 }
 
 func (a *app) saveSettings() {

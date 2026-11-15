@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 
 	"github.com/egoist/mygo"
@@ -17,6 +18,8 @@ type Settings struct {
 	// Shortcut shows and hides the panel, as an accelerator. Empty, the
 	// first of defaultShortcuts that is free does.
 	Shortcut string `json:"shortcut,omitempty"`
+	// StackShortcut pastes the next stack item. Empty uses the default.
+	StackShortcut string `json:"stackShortcut,omitempty"`
 	// Empty follows the system; otherwise "en" or "zh-Hans".
 	Language string `json:"language,omitempty"`
 }
@@ -30,11 +33,15 @@ func settingsPath() (string, error) {
 }
 
 func loadSettings() Settings {
-	var s Settings
 	path, err := settingsPath()
 	if err != nil {
-		return s
+		return Settings{}
 	}
+	return readSettings(path)
+}
+
+func readSettings(path string) Settings {
+	var s Settings
 	if data, err := os.ReadFile(path); err == nil {
 		_ = json.Unmarshal(data, &s)
 	}
@@ -46,11 +53,57 @@ func (s Settings) save() error {
 	if err != nil {
 		return err
 	}
+	return s.saveAt(path)
+}
+
+func (s Settings) saveAt(path string) error {
 	data, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
 		return err
 	}
 	return os.WriteFile(path, data, 0o644)
+}
+
+// shortcutSignature compares recorded accelerators with saved aliases and
+// modifier orders. Native registration remains the authority on validity.
+func shortcutSignature(acc string) string {
+	parts := strings.Split(strings.ToLower(strings.TrimSpace(acc)), "+")
+	if strings.HasSuffix(acc, "++") {
+		parts = append(parts[:len(parts)-2], "+")
+	}
+	for i, part := range parts {
+		part = strings.TrimSpace(part)
+		switch part {
+		case "cmdorctrl", "commandorcontrol":
+			part = "ctrl"
+			if runtime.GOOS == "darwin" {
+				part = "super"
+			}
+		case "command", "cmd", "meta", "win":
+			part = "super"
+		case "control":
+			part = "ctrl"
+		case "option", "altgr":
+			part = "alt"
+		case "return":
+			part = "enter"
+		case "esc":
+			part = "escape"
+		case "del":
+			part = "delete"
+		case "ins":
+			part = "insert"
+		case "plus":
+			part = "+"
+		}
+		parts[i] = part
+	}
+	slices.Sort(parts)
+	return strings.Join(slices.Compact(parts), "+")
+}
+
+func sameShortcut(a, b string) bool {
+	return shortcutSignature(a) == shortcutSignature(b)
 }
 
 // keyNames are the keys a shortcut can end with, as accelerators name them.

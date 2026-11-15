@@ -11,9 +11,16 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-// stackShortcut pastes the next clip of the stack from any app. It is
+// defaultStackShortcut pastes the next clip of the stack from any app. It is
 // registered only while the stack holds clips, so it borrows the keys briefly.
-const stackShortcut = "CmdOrCtrl+Alt+V"
+const defaultStackShortcut = "CmdOrCtrl+Alt+V"
+
+func (a *app) stackShortcut() string {
+	if a.settings.StackShortcut != "" {
+		return a.settings.StackShortcut
+	}
+	return defaultStackShortcut
+}
 
 var iconStack = svg(`<path d="m12 3 9 5-9 5-9-5 9-5z"/><path d="m3 13 9 5 9-5"/>`)
 
@@ -59,17 +66,22 @@ func (a *app) pruneStack() {
 // syncStackShortcut holds the stack's shortcut while the stack has clips.
 // Recording a panel shortcut lets it go, so the recorder sees those keys.
 func (a *app) syncStackShortcut() {
-	want := len(a.stack) > 0 && !a.recording
+	want := ""
+	if len(a.stack) > 0 && !a.recording {
+		want = a.stackShortcut()
+	}
 	if want == a.stackKeys {
 		return
 	}
-	if want {
-		if err := mygo.GlobalShortcut.Register(stackShortcut, a.pasteNext); err != nil {
-			log.Printf("shortcut %s: %v", stackShortcut, err)
+	if a.stackKeys != "" {
+		a.globalShortcuts().Unregister(a.stackKeys)
+		a.stackKeys = ""
+	}
+	if want != "" {
+		if err := a.globalShortcuts().Register(want, a.pasteNext); err != nil {
+			log.Printf("shortcut %s: %v", want, err)
 			return
 		}
-	} else {
-		mygo.GlobalShortcut.Unregister(stackShortcut)
 	}
 	a.stackKeys = want
 }
@@ -138,8 +150,8 @@ func (a *app) stackStatus(c *ui.Context, width float32) {
 		Background(t.Accent.Alpha(0.1)).Children(func() {
 		ui.Icon(c, iconStack).FontSize(12).TextColor(t.Accent)
 		ui.Text(c, tx.StackCount(len(a.stack))).FontSize(11).FontWeight(600).TextColor(t.Accent).SingleLine()
-		if a.stackKeys && width >= 1100 {
-			for _, key := range keycaps(stackShortcut) {
+		if a.stackKeys != "" && width >= 1100 {
+			for _, key := range keycaps(a.stackShortcut()) {
 				keycap(c, key)
 			}
 			ui.Text(c, tx.PasteNext()).FontSize(11).TextColor(t.TextMuted).SingleLine()
