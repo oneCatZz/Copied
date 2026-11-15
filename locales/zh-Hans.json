@@ -78,5 +78,6 @@
   "deleteGroupHint": "只移除分组，其中的剪贴板内容仍保留在历史中。",
   "keepGrouped": "保留分组内容",
   "cancel": "取消",
-  "save": "保存"
+  "save": "保存",
+  "colors": "颜色"
 }

@@ -823,3 +823,13 @@ func Save() string { return In(i18n.Locale()).Save() }
 func (msgs Messages) Save() string {
 	return Catalog.Format(msgs.locale, "save", nil)
 }
+
+// Colors says "Colors"
+// in the language the app shows.
+func Colors() string { return In(i18n.Locale()).Colors() }
+
+// Colors says "Colors"
+// in the language of msgs.
+func (msgs Messages) Colors() string {
+	return Catalog.Format(msgs.locale, "colors", nil)
+}

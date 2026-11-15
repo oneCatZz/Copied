@@ -25,6 +25,7 @@ const (
 	FilterText
 	FilterCode
 	FilterLink
+	FilterColor
 	FilterImage
 	FilterFiles
 	FilterPinned
@@ -163,6 +164,8 @@ func (s *Store) List(filter Filter, query string, groupID ...int64) ([]*Clip, er
 		where = append(where, "kind = 'code'")
 	case FilterLink:
 		where = append(where, "kind = 'link'")
+	case FilterColor:
+		where = append(where, "kind = 'color'")
 	case FilterImage:
 		where = append(where, "kind = 'image'")
 	case FilterFiles:
