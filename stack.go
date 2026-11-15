@@ -116,7 +116,6 @@ func (a *app) queueStackPaste(p stackPaste) {
 				if !ok {
 					continue
 				}
-				waitForModifiersUp() // Windows: Alt held would change the paste
 				pasteInto(p.target)
 				time.Sleep(stackPasteGap)
 			}

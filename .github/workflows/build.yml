@@ -43,6 +43,11 @@ jobs:
         run: go test -count=1 github.com/egoist/mygo/internal/scene
       - name: Test
         run: go test -count=1 ./...
+      - name: Test Windows native paste
+        if: runner.os == 'Windows'
+        env:
+          COPIED_NATIVE_TEST: "1"
+        run: go test -count=1 -v -run '^TestWindowsPasteNative$' .
       - name: Check MyGo UI lifetimes
         run: go tool mygo vet .
       - name: Import macOS signing certificate

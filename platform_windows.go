@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log"
 	"syscall"
 	"time"
 	"unsafe"
@@ -30,10 +31,11 @@ func frontWindow() uintptr {
 }
 
 const (
-	inputKeyboard  = 1
-	keyEventFKeyUp = 0x0002
-	vkControl      = 0x11
-	vkV            = 0x56
+	inputKeyboard    = 1
+	keyEventFKeyUp   = 0x0002
+	keyEventExtended = 0x0001
+	vkControl        = 0x11
+	vkV              = 0x56
 )
 
 // keyboardInput is INPUT with its KEYBDINPUT, as laid out on 64-bit Windows.
@@ -49,39 +51,65 @@ type keyboardInput struct {
 	_     [8]byte
 }
 
-// waitForModifiersUp waits, a second at most, for the keys of a global
-// shortcut to be let go: Alt held would turn the Ctrl+V sent into another key.
-func waitForModifiersUp() {
-	keys := []uintptr{0x10, 0x11, 0x12, 0x5B, 0x5C, vkV} // Shift, Ctrl, Alt, both Win, V
-	for deadline := time.Now().Add(time.Second); time.Now().Before(deadline); {
-		held := false
-		for _, vk := range keys {
-			if state, _, _ := procGetAsyncKeyState.Call(vk); state&0x8000 != 0 {
-				held = true
-				break
-			}
-		}
-		if !held {
-			return
-		}
-		time.Sleep(15 * time.Millisecond)
+// Use the physical left/right keys, rather than also releasing their
+// aggregate VK_CONTROL/SHIFT/MENU aliases. Right Ctrl/Alt and Win keys
+// require KEYEVENTF_EXTENDEDKEY when synthesized.
+var pasteModifiers = [...]uint16{0xA0, 0xA1, 0xA2, 0xA3, 0xA4, 0xA5, 0x5B, 0x5C}
+
+func pasteKey(vk uint16, up bool) keyboardInput {
+	in := keyboardInput{typ: inputKeyboard, vk: vk}
+	if vk == 0xA3 || vk == 0xA5 || vk == 0x5B || vk == 0x5C {
+		in.flags |= keyEventExtended
 	}
+	if up {
+		in.flags |= keyEventFKeyUp
+	}
+	return in
+}
+
+// SendInput inherits the keys already down. Temporarily release them in
+// the same atomic input batch as Ctrl+V, then restore only the modifiers.
+// Restoring V too would invoke the stack hotkey again. Unlike waiting for
+// key-up, this also works while Ctrl+Alt is held for consecutive stack pastes.
+func pasteInputs(down func(uint16) bool) []keyboardInput {
+	var held []uint16
+	var inputs []keyboardInput
+	if down(vkV) {
+		inputs = append(inputs, pasteKey(vkV, true))
+	}
+	for _, vk := range pasteModifiers {
+		if down(vk) {
+			held = append(held, vk)
+			inputs = append(inputs, pasteKey(vk, true))
+		}
+	}
+	inputs = append(inputs, pasteKey(vkControl, false), pasteKey(vkV, false), pasteKey(vkV, true), pasteKey(vkControl, true))
+	for _, vk := range held {
+		inputs = append(inputs, pasteKey(vk, false))
+	}
+	return inputs
 }
 
 // pasteInto gives the keyboard to the window the panel was shown over and
 // presses Ctrl+V there.
 func pasteInto(target uintptr) {
 	if target != 0 {
-		if alive, _, _ := procIsWindow.Call(target); alive != 0 {
-			procSetForegroundWindow.Call(target)
+		if alive, _, _ := procIsWindow.Call(target); alive == 0 {
+			log.Print("paste: target window no longer exists")
+			return
 		}
+		procSetForegroundWindow.Call(target)
 	}
 	time.Sleep(80 * time.Millisecond) // until the window has the keyboard
-	inputs := []keyboardInput{
-		{typ: inputKeyboard, vk: vkControl},
-		{typ: inputKeyboard, vk: vkV},
-		{typ: inputKeyboard, vk: vkV, flags: keyEventFKeyUp},
-		{typ: inputKeyboard, vk: vkControl, flags: keyEventFKeyUp},
+	if target != 0 && frontWindow() != target {
+		log.Print("paste: target window did not receive focus")
+		return
 	}
-	procSendInput.Call(uintptr(len(inputs)), uintptr(unsafe.Pointer(&inputs[0])), unsafe.Sizeof(inputs[0]))
+	inputs := pasteInputs(func(vk uint16) bool {
+		state, _, _ := procGetAsyncKeyState.Call(uintptr(vk))
+		return state&0x8000 != 0
+	})
+	if n, _, err := procSendInput.Call(uintptr(len(inputs)), uintptr(unsafe.Pointer(&inputs[0])), unsafe.Sizeof(inputs[0])); n != uintptr(len(inputs)) {
+		log.Printf("paste: SendInput sent %d/%d events: %v", n, len(inputs), err)
+	}
 }
