@@ -17,7 +17,7 @@ Windows 和 macOS 上的剪贴板历史工具，功能参考 [Paste](https://pas
 
 手动允许后，后续通常可以直接双击打开。首次打开的系统放行与“辅助功能”授权是两个独立步骤。更多说明见 [Apple 官方指引](https://support.apple.com/zh-cn/102445)。
 
-macOS 构建使用固定的自签名证书“Copied Code Signing”签名，升级到新版本后“辅助功能”授权仍然有效，无需重新添加。
+macOS 构建使用固定的自签名证书“Copied Code Signing”签名，升级到新版本后“辅助功能”授权仍然有效，无需重新添加。从使用此证书之前的旧版本升级时，需要在“辅助功能”列表中删除 Copied 后重新添加一次；如果开关显示已开启但无法自动粘贴，也按此处理。
 
 维护者：证书以 `.p12` 的 base64 存放在仓库 Secrets `MACOS_CERTIFICATE_P12`、`MACOS_CERTIFICATE_PASSWORD` 中，CI 打包时由 `scripts/import-signing-certificate.sh` 导入临时钥匙串；没有这两个 Secret 时（如来自 fork 的 PR）回退为 ad-hoc 签名。本地打包使用同一证书：`go tool mygo build -platform darwin/universal -sign "Copied Code Signing"`。
 
@@ -100,7 +100,7 @@ Windows 和 macOS 点击或右键托盘图标打开分组弹层，顶部显示�
 在托盘弹层中启用“开机启动”即可。手动打开程序时会显示历史面板；由登录自启打开时只在后台记录，通过托盘图标或全局快捷键呼出面板。
 
 - **Windows**：向当前用户的 `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` 写入当前程序路径和登录启动参数，不需要管理员权限。可在任务管理器的“启动应用”中管理。移动程序后，重新关闭再开启此开关，以更新启动路径。
-- **macOS**：需要使用打包后的 `.app`。macOS 13 及以上使用系统登录项，可在“系统设置 → 通用 → 登录项”中管理；macOS 12 使用 LaunchAgent。此功能尚未在 Mac 实机验证。
+- **macOS**：需要使用打包后的 `.app`。macOS 13 及以上使用系统登录项，可在“系统设置 → 通用 → 登录项”中管理；macOS 12 使用 LaunchAgent。
 
 关闭“开机启动”会移除对应的自启设置，不影响当前运行的程序。
 
@@ -130,7 +130,7 @@ MyGo 0.9.0 的渲染缓存会残留旧场景中的图片引用。本项目暂时
 - `Copied-windows-amd64`：Windows x64 程序、资源及安装包。
 - `Copied-macos-universal`：同时支持 Apple Silicon 和 Intel 的 macOS DMG。
 
-在对应运行页面的 **Artifacts** 中下载，产物保留 14 天。PR 也执行相同检查与打包。当前未配置发布证书和 Apple 公证，系统可能提示未识别的开发者；构建成功不代表已通过 Mac 实机功能验证。
+在对应运行页面的 **Artifacts** 中下载，产物保留 14 天。PR 也执行相同检查与打包。macOS 产物使用上文的固定自签名证书签名，未经 Apple 公证，首次打开仍会提示未识别的开发者。
 
 ## 测试
 
@@ -179,9 +179,8 @@ Windows 正式构建可用 `scripts/measure-private-memory.ps1` 比较私有提�
 ## 平台说明
 
 - **macOS 自动粘贴需要授权**：在“系统设置 → 隐私与安全性 → 辅助功能”里允许 Copied。未授权时内容只会进入剪贴板，需要手动按 `⌘V`。
-- **macOS 尚未在真机上验证**：菜单栏弹层、登录自启和自动粘贴仍需在 Mac 上确认。
 - **Linux**：没有原生剪贴板变更通知和自动粘贴实现，不在支持范围内。
-- **内存**：占用受屏幕尺寸、缩放率、图片内容和 GPU 驱动影响。登录后台启动时，首次呼出才创建面板和渲染资源。缩略图缓存通常最多 24 项，优先保留可见及邻近图片，超宽屏按需扩容；图片显示后释放 CPU 像素副本。预览使用图片自身圆角和矩形文本裁剪，减少切换动画的圆角遮罩缓存。隐藏面板立即清空应用层图片缓存，2 秒内可快速重开，超过后销毁渲染窗口以释放 UI 与 GPU 缓存，下次呼出时重建。后台继续记录剪贴板，因此进程仍会保留基础内存。
+- **内存**：占用受屏幕尺寸、缩放率、图片内容和 GPU 驱动影响。登录后台启动时，首次呼出才创建面板和渲染资源。缩略图缓存通常最多 24 项，优先保留可见及邻近图片，超宽屏按需扩容；图片显示后释放 CPU 像素副本。预览使用图片自身圆角和矩形文本裁剪，减少切换动画的圆角遮罩缓存。隐藏面板立即清空应用层图片缓存，2 秒内可快速重开，超过后销毁渲染窗口以释放 UI 与 GPU 缓存，下次呼出时重建。后台继续记录剪贴板，因此进程仍会保留基础内存。在 macOS（Apple Silicon）上实测，415 条记录含 40 张图片时：登录后台启动约 16 MB，打开面板约 230 MB，其中约 180 MB 为图形内存（GPU 纹理与渲染缓冲，随屏幕宽度和缩放率变化）。日常使用中隐藏面板、渲染窗口销毁后约 45 MB。
 
 ## 代码结构
 
@@ -190,7 +189,13 @@ Windows 正式构建可用 `scripts/measure-private-memory.ps1` 比较私有提�
 | `main.go` | 应用入口、面板窗口、托盘、全局快捷键、剪贴板监听 |
 | `tray_menu.go` | Windows / macOS 托盘弹层、记录状态与开关 |
 | `view.go` | 面板界面：搜索栏、筛选、卡片、设置对话框 |
-| `filters.go` | 筛选控件与流动胶囊动画 |
+| `filters.go` | 类型筛选控件与流动胶囊动画 |
+| `groups.go` / `group_view.go` | 分组的存储与迁移；分组导航、分组菜单与弹窗 |
+| `card_menu.go` | 卡片右键菜单 |
+| `stack.go` | Stack 顺序粘贴：队列、全局快捷键、串行粘贴 |
+| `batch.go` | 多选与批量复制粘贴的合并规则 |
+| `code.go` | 代码识别与语法高亮预览 |
+| `ui_style.go` | 弹层表面、对话框按钮等共用样式 |
 | `theme.go` | 配色、图标、动画参数 |
 | `clip.go` | 条目模型，读写系统剪贴板 |
 | `store.go` | SQLite 存储 |
@@ -198,3 +203,5 @@ Windows 正式构建可用 `scripts/measure-private-memory.ps1` 比较私有提�
 | `language.go` / `locales/` | 语言选择、系统语言匹配与中英文文案 |
 | `platform_*.go` | 各平台的剪贴板变更检测与模拟粘贴 |
 | `resources/` | 应用图标、Windows 彩色托盘图标及 macOS 模板图标，包含 SVG 源文件 |
+| `macos.entitlements.plist` | macOS 签名权限：允许自签名构建加载内置 SQLite 动态库 |
+| `scripts/` | MyGo 补丁准备、CI 签名证书导入、Windows 内存测量 |
