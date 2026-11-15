@@ -45,8 +45,29 @@ jobs:
         run: go test -count=1 ./...
       - name: Check MyGo UI lifetimes
         run: go tool mygo vet .
+      - name: Import macOS signing certificate
+        if: runner.os == 'macOS'
+        env:
+          MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        run: bash scripts/import-signing-certificate.sh
       - name: Package
-        run: go tool mygo build -platform ${{ matrix.platform }}
+        shell: bash
+        run: |
+          if [ -z "${MACOS_SIGNING_IDENTITY:-}" ]; then
+            go tool mygo build -platform ${{ matrix.platform }}
+            exit 0
+          fi
+          # Signing asks Apple's timestamp server, which sometimes refuses.
+          for attempt in 1 2 3 4 5; do
+            go tool mygo build -platform ${{ matrix.platform }} -sign "$MACOS_SIGNING_IDENTITY" && exit 0
+            echo "Signing failed (attempt $attempt), retrying."
+            sleep 15
+          done
+          exit 1
+      - name: Remove macOS signing keychain
+        if: always() && env.MACOS_SIGNING_KEYCHAIN != ''
+        run: security delete-keychain "$MACOS_SIGNING_KEYCHAIN"
       - name: Upload packages
         uses: actions/upload-artifact@v6
         with:

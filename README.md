@@ -17,6 +17,10 @@ Windows 和 macOS 上的剪贴板历史工具，功能参考 [Paste](https://pas
 
 手动允许后，后续通常可以直接双击打开。首次打开的系统放行与“辅助功能”授权是两个独立步骤。更多说明见 [Apple 官方指引](https://support.apple.com/zh-cn/102445)。
 
+macOS 构建使用固定的自签名证书“Copied Code Signing”签名，升级到新版本后“辅助功能”授权仍然有效，无需重新添加。
+
+维护者：证书以 `.p12` 的 base64 存放在仓库 Secrets `MACOS_CERTIFICATE_P12`、`MACOS_CERTIFICATE_PASSWORD` 中，CI 打包时由 `scripts/import-signing-certificate.sh` 导入临时钥匙串；没有这两个 Secret 时（如来自 fork 的 PR）回退为 ad-hoc 签名。本地打包使用同一证书：`go tool mygo build -platform darwin/universal -sign "Copied Code Signing"`。
+
 ## 功能
 
 - **记录**：文本、代码片段、链接、颜色值（如 `#3B82F6`）、图片、文件。
