@@ -58,11 +58,6 @@ var (
 	selProcessIdentifier = objc.RegisterName("processIdentifier")
 )
 
-// waitForModifiersUp has nothing to wait for on macOS: pasteInto's keys
-// leave out those the user holds, so the user may keep holding the stack's
-// shortcut and press V again for the next clip.
-func waitForModifiersUp() {}
-
 // pasteInto presses Command+V in the app the user is in. macOS lets the app
 // do so once the user allowed it in System Settings, Privacy & Security,
 // Accessibility; until then the clip is on the clipboard, to paste by hand.
@@ -130,3 +125,4 @@ func frontmostPID() int32 {
 	})
 	return pid
 }
+
