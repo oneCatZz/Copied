@@ -60,7 +60,8 @@ func (a *app) filters(c *ui.Context) {
 	trigger := sel.Trigger.Row().Width(118).Height(34).Shrink(0).PaddingX(8).Gap(5).
 		AlignItems(ui.Center).Radius(10).Border(1, t.Border).Background(t.Surface).
 		Cursor(ui.CursorPointer).Label(tx.ClipboardTypes()).Value(labels[a.filter]).
-		HandleInput(a.typeGridInput).OnChange(func() { a.setFilter(a.filter, now) })
+		HandleInput(a.typeGridInput).ObserveInput(a.typeGridObserve).
+		OnChange(func() { a.setFilter(a.filter, now) })
 	if a.typeMenuOpen || trigger.Hovered() || trigger.FocusVisible() {
 		trigger.Border(1, t.Accent.Alpha(0.4)).Background(t.Accent.Alpha(0.05))
 	}
@@ -109,6 +110,15 @@ func (a *app) filters(c *ui.Context) {
 	})
 }
 
+// The select takes Up and Down as its own shortcuts, moving one option at a
+// time, before HandleInput sees them. Observing them first lets the grid
+// move a whole row; the Highlight this queues overrides the select's step.
+func (a *app) typeGridObserve(ev ui.InputEvent) {
+	if ev.Key == ui.KeyUp || ev.Key == ui.KeyDown {
+		a.typeGridInput(ev)
+	}
+}
+
 // The popup is a two-column list. Keep spatial arrow navigation without
 // retaining its build-scoped SelectParts in an input callback.
 func (a *app) typeGridInput(ev ui.InputEvent) bool {
@@ -130,7 +140,7 @@ func (a *app) typeGridInput(ev ui.InputEvent) bool {
 			next -= 2
 		}
 	case ui.KeyDown:
-		if next+2 <= int(FilterFiles) {
+		if next+2 < int(FilterPinned) {
 			next += 2
 		}
 	default:
@@ -148,6 +158,8 @@ func filterColor(filter Filter, t *ui.Theme) ui.Color {
 		return kindColor(KindCode, t.Dark)
 	case FilterLink:
 		return kindColor(KindLink, t.Dark)
+	case FilterColor:
+		return kindColor(KindColor, t.Dark)
 	case FilterImage:
 		return kindColor(KindImage, t.Dark)
 	case FilterFiles:
@@ -164,6 +176,8 @@ func filterIcon(filter Filter) *ui.SVG {
 		return iconCode
 	case FilterLink:
 		return iconLink
+	case FilterColor:
+		return iconColor
 	case FilterImage:
 		return iconImage
 	case FilterFiles:

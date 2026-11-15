@@ -10,6 +10,7 @@ import (
 	"log"
 	"runtime"
 	"runtime/debug"
+	"slices"
 	"sync/atomic"
 	"time"
 
@@ -63,7 +64,8 @@ type app struct {
 	filter        Filter
 	query         string
 	chosen        int
-	scrollTo      bool // the chosen card scrolls into view in the next frame
+	picked        []int64 // clips picked to paste together, in the order picked
+	scrollTo      bool    // the chosen card scrolls into view in the next frame
 	input         ui.Handle
 	thumbs        map[int64]*thumb // the pictures of the image clips in view, by clip
 	cardMenuID    int64            // the clip whose context menu is open; zero closes it
@@ -88,6 +90,11 @@ type app struct {
 	thumbSlots chan struct{} // bounds background thumbnail reads and decoding
 	thumbClock uint64
 	thumbLimit int
+
+	stack     []int64 // clips to paste in turn, first to last
+	stackKeys bool    // stackShortcut is registered
+
+	stackPastes chan stackPaste // pastes of the stack, in turn (queueStackPaste)
 
 	stripScroll      ui.ScrollState
 	stripWheelTarget float32 // pending travel from consecutive wheel notches
@@ -128,6 +135,7 @@ func (a *app) reload() {
 	if !listed[a.cardMenuID] {
 		a.cardMenuID = 0
 	}
+	a.picked = slices.DeleteFunc(a.picked, func(id int64) bool { return !listed[id] })
 }
 
 func (a *app) choose(i int) {
@@ -150,7 +158,15 @@ func (a *app) copy(i int, plain bool) bool {
 	if i < 0 || i >= len(a.clips) {
 		return false
 	}
-	id := a.clips[i].ID
+	if ids := a.batchIDs(i); ids != nil {
+		return a.copyBatch(ids, plain)
+	}
+	return a.copyClip(a.clips[i].ID, plain)
+}
+
+// copyClip puts the clip with an ID on the clipboard and moves it to the
+// front of the history.
+func (a *app) copyClip(id int64, plain bool) bool {
 	clip, err := a.store.Get(id)
 	if err != nil || clip == nil {
 		log.Print("reading clip: ", err)
@@ -189,8 +205,13 @@ func (a *app) remove(i int) {
 	if i < 0 || i >= len(a.clips) {
 		return
 	}
-	if err := a.store.Delete(a.clips[i].ID); err != nil {
+	id := a.clips[i].ID
+	if err := a.store.Delete(id); err != nil {
 		log.Print(err)
+	}
+	if n := slices.Index(a.stack, id); n >= 0 {
+		a.stack = slices.Delete(a.stack, n, n+1)
+		a.syncStackShortcut()
 	}
 	a.reload()
 }
@@ -274,6 +295,7 @@ func (a *app) show() {
 	a.panel.SetSize(width, panelHeight)
 	a.panel.SetPosition(d.WorkArea.X+panelMargin, d.WorkArea.Y+d.WorkArea.Height-panelHeight-panelMargin)
 	a.query, a.filter, a.chosen, a.scrollTo = "", FilterAll, 0, true
+	a.picked = nil
 	// Reveal alone can leave the first card flush against the viewport edge.
 	// Reset its offset and pending wheel animation so the padding returns too.
 	a.stripScroll = ui.ScrollState{Handle: a.stripScroll.Handle}
@@ -375,7 +397,7 @@ func (a *app) panelHidden(panel *mygo.Window) {
 	a.cardMenuID = 0
 	a.searchSession++
 	a.recordError = ""
-	a.clips = nil
+	a.clips, a.picked = nil, nil
 	a.clearThumbs()
 	a.cancelPanelRelease()
 	epoch := a.panelEpoch
@@ -417,6 +439,7 @@ func (a *app) startRecording() {
 	if a.shortcut != "" {
 		mygo.GlobalShortcut.Unregister(a.shortcut)
 	}
+	a.syncStackShortcut()
 	if runtime.GOOS == "darwin" {
 		// AppKit takes Cmd+` for window cycling before the recorder sees it.
 		// Reserve it while recording, using the same API as the saved shortcut.
@@ -436,6 +459,7 @@ func (a *app) startRecording() {
 // when there is none or the system refuses it.
 func (a *app) stopRecording(shortcut string) {
 	a.recording = false
+	defer a.syncStackShortcut()
 	if a.recordCapture != "" {
 		mygo.GlobalShortcut.Unregister(a.recordCapture)
 		a.recordCapture = ""

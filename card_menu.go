@@ -22,15 +22,20 @@ func (a *app) cardMenu(c *ui.Context, card ui.Element, i int, clip *Clip) (actio
 	tx := locales.In(c.Locale())
 	m.Popup(func(panel ui.Element) {
 		popupSurface(c, panel).Width(trayMenuWidth).Padding(6)
-		if menuActionRow(c, m.Item(), menuPaste, tx.Paste(), menuShortcut("Enter"), t.Accent).Clicked() {
+		batch := a.batchIDs(i) != nil
+		pasteLabel, copyLabel := tx.Paste(), tx.CopyOnly()
+		if batch {
+			pasteLabel, copyLabel = tx.PasteAll(), tx.CopyAll()
+		}
+		if menuActionRow(c, m.Item(), menuPaste, pasteLabel, menuShortcut("Enter"), t.Accent).Clicked() {
 			action = func() { a.paste(i, false) }
 		}
-		if clip.Kind != KindImage && clip.Kind != KindFiles {
+		if clip.Kind != KindImage && clip.Kind != KindFiles && !batch {
 			if menuActionRow(c, m.Item(), iconText, tx.PastePlain(), menuShortcut("Shift+Enter"), t.TextMuted).Clicked() {
 				action = func() { a.paste(i, true) }
 			}
 		}
-		if menuActionRow(c, m.Item(), menuCopy, tx.CopyOnly(), menuShortcut("CmdOrCtrl+Enter"), t.TextMuted).Clicked() {
+		if menuActionRow(c, m.Item(), menuCopy, copyLabel, menuShortcut("CmdOrCtrl+Enter"), t.TextMuted).Clicked() {
 			action = func() { a.copyOnly(i) }
 		}
 		trayDivider(c)
@@ -40,6 +45,13 @@ func (a *app) cardMenu(c *ui.Context, card ui.Element, i int, clip *Clip) (actio
 		}
 		if menuActionRow(c, m.Item(), iconFolder, tx.AddToGroups(), menuShortcut("CmdOrCtrl+P"), ink).Clicked() {
 			action = func() { a.openClipGroups(i) }
+		}
+		stackLabel, stackInk := tx.AddToStack(), t.TextMuted
+		if a.stackOrder(clip.ID) > 0 && !batch {
+			stackLabel, stackInk = tx.RemoveFromStack(), t.Accent
+		}
+		if menuActionRow(c, m.Item(), iconStack, stackLabel, menuShortcut("CmdOrCtrl+S"), stackInk).Clicked() {
+			action = func() { a.toggleStack(i) }
 		}
 		trayDivider(c)
 		if menuActionRow(c, m.Item().TextColor(t.Danger), trayTrash, tx.Delete(), menuShortcut("CmdOrCtrl+Backspace"), t.Danger).Clicked() {

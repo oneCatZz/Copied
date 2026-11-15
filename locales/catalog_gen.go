@@ -823,3 +823,123 @@ func Save() string { return In(i18n.Locale()).Save() }
 func (msgs Messages) Save() string {
 	return Catalog.Format(msgs.locale, "save", nil)
 }
+
+// Colors says "Colors"
+// in the language the app shows.
+func Colors() string { return In(i18n.Locale()).Colors() }
+
+// Colors says "Colors"
+// in the language of msgs.
+func (msgs Messages) Colors() string {
+	return Catalog.Format(msgs.locale, "colors", nil)
+}
+
+// AddToStack says "Add to Stack"
+// in the language the app shows.
+func AddToStack() string { return In(i18n.Locale()).AddToStack() }
+
+// AddToStack says "Add to Stack"
+// in the language of msgs.
+func (msgs Messages) AddToStack() string {
+	return Catalog.Format(msgs.locale, "addToStack", nil)
+}
+
+// RemoveFromStack says "Remove from Stack"
+// in the language the app shows.
+func RemoveFromStack() string { return In(i18n.Locale()).RemoveFromStack() }
+
+// RemoveFromStack says "Remove from Stack"
+// in the language of msgs.
+func (msgs Messages) RemoveFromStack() string {
+	return Catalog.Format(msgs.locale, "removeFromStack", nil)
+}
+
+// StackCount says "Stack · {count, number}"
+// in the language the app shows.
+func StackCount(count int) string { return In(i18n.Locale()).StackCount(count) }
+
+// StackCount says "Stack · {count, number}"
+// in the language of msgs.
+func (msgs Messages) StackCount(count int) string {
+	return Catalog.Format(msgs.locale, "stackCount", map[string]any{"count": count})
+}
+
+// ClearStack says "Clear Stack"
+// in the language the app shows.
+func ClearStack() string { return In(i18n.Locale()).ClearStack() }
+
+// ClearStack says "Clear Stack"
+// in the language of msgs.
+func (msgs Messages) ClearStack() string {
+	return Catalog.Format(msgs.locale, "clearStack", nil)
+}
+
+// PasteNext says "Paste next"
+// in the language the app shows.
+func PasteNext() string { return In(i18n.Locale()).PasteNext() }
+
+// PasteNext says "Paste next"
+// in the language of msgs.
+func (msgs Messages) PasteNext() string {
+	return Catalog.Format(msgs.locale, "pasteNext", nil)
+}
+
+// PickedCount says "{count, number} selected"
+// in the language the app shows.
+func PickedCount(count int) string { return In(i18n.Locale()).PickedCount(count) }
+
+// PickedCount says "{count, number} selected"
+// in the language of msgs.
+func (msgs Messages) PickedCount(count int) string {
+	return Catalog.Format(msgs.locale, "pickedCount", map[string]any{"count": count})
+}
+
+// PasteAll says "Paste all"
+// in the language the app shows.
+func PasteAll() string { return In(i18n.Locale()).PasteAll() }
+
+// PasteAll says "Paste all"
+// in the language of msgs.
+func (msgs Messages) PasteAll() string {
+	return Catalog.Format(msgs.locale, "pasteAll", nil)
+}
+
+// CopyAll says "Copy all"
+// in the language the app shows.
+func CopyAll() string { return In(i18n.Locale()).CopyAll() }
+
+// CopyAll says "Copy all"
+// in the language of msgs.
+func (msgs Messages) CopyAll() string {
+	return Catalog.Format(msgs.locale, "copyAll", nil)
+}
+
+// ClearSelection says "Clear selection"
+// in the language the app shows.
+func ClearSelection() string { return In(i18n.Locale()).ClearSelection() }
+
+// ClearSelection says "Clear selection"
+// in the language of msgs.
+func (msgs Messages) ClearSelection() string {
+	return Catalog.Format(msgs.locale, "clearSelection", nil)
+}
+
+// MultiSelect says "Multi-select"
+// in the language the app shows.
+func MultiSelect() string { return In(i18n.Locale()).MultiSelect() }
+
+// MultiSelect says "Multi-select"
+// in the language of msgs.
+func (msgs Messages) MultiSelect() string {
+	return Catalog.Format(msgs.locale, "multiSelect", nil)
+}
+
+// Click says "Click"
+// in the language the app shows.
+func Click() string { return In(i18n.Locale()).Click() }
+
+// Click says "Click"
+// in the language of msgs.
+func (msgs Messages) Click() string {
+	return Catalog.Format(msgs.locale, "click", nil)
+}

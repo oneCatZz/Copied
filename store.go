@@ -25,6 +25,7 @@ const (
 	FilterText
 	FilterCode
 	FilterLink
+	FilterColor
 	FilterImage
 	FilterFiles
 	FilterPinned
@@ -163,6 +164,8 @@ func (s *Store) List(filter Filter, query string, groupID ...int64) ([]*Clip, er
 		where = append(where, "kind = 'code'")
 	case FilterLink:
 		where = append(where, "kind = 'link'")
+	case FilterColor:
+		where = append(where, "kind = 'color'")
 	case FilterImage:
 		where = append(where, "kind = 'image'")
 	case FilterFiles:
@@ -219,6 +222,12 @@ func (s *Store) Get(id int64) (*Clip, error) {
 	c := &Clip{ID: id, Kind: Kind(str(v[0])), Text: str(v[1]), HTML: str(v[2])}
 	c.Data, _ = v[3].([]byte)
 	return c, nil
+}
+
+// Has reports whether a clip is still in the history.
+func (s *Store) Has(id int64) bool {
+	rows, err := s.db.Query(context.Background(), `SELECT 1 FROM clips WHERE id = ?`, id)
+	return err == nil && len(rows.Values) > 0
 }
 
 // Thumb returns the small picture of an image clip, a PNG.

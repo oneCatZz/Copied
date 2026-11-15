@@ -68,30 +68,53 @@ func (a *app) groupNavigation(c *ui.Context, width float32) {
 			selectTrigger(c, button, a.currentGroup().label(locale), iconChevron).Grow(1)
 			a.groupMenu(button, locale)
 		} else {
-			const groupWidth = float32(80)
-			capacity := min(4, max(0, int((width-64-groupWidth-8)/(groupWidth+2))))
-			visible := append([]Group(nil), a.groups[:min(capacity, len(a.groups))]...)
-			if a.groupID != 0 && !slices.ContainsFunc(visible, func(g Group) bool { return g.ID == a.groupID }) && len(visible) > 0 {
-				visible[len(visible)-1] = a.currentGroup()
+			// Chips fit their names, within bounds, so longer names stay readable.
+			const minChip, maxChip, maxVisible = float32(56), float32(160), 6
+			chipWidth := func(group Group) float32 {
+				w, _ := c.MeasureText(0, ui.Span{Text: group.label(locale), Size: 12, Weight: 550})
+				return min(maxChip, max(minChip, w+24))
 			}
-			items := append([]Group{{}}, visible...)
-			target := float32(0)
+			budget := width - 72 // the more and new buttons, and gaps
+			items, widths := []Group{{}}, []float32{chipWidth(Group{})}
+			used := widths[0]
+			for _, group := range a.groups {
+				w := chipWidth(group)
+				if len(items) > maxVisible || used+2+w > budget {
+					break
+				}
+				items, widths = append(items, group), append(widths, w)
+				used += 2 + w
+			}
+			if a.groupID != 0 && len(items) > 1 && !slices.ContainsFunc(items, func(g Group) bool { return g.ID == a.groupID }) {
+				// Keep the current group in view, in place of the last ones.
+				current := a.currentGroup()
+				w := chipWidth(current)
+				for len(items) > 1 && (used+2+w > budget || len(items) > maxVisible) {
+					used -= 2 + widths[len(widths)-1]
+					items, widths = items[:len(items)-1], widths[:len(widths)-1]
+				}
+				w = min(w, budget-used-2)
+				items, widths = append(items, current), append(widths, w)
+				used += 2 + w
+			}
+			target, targetWidth, x := float32(0), widths[0], float32(0)
 			for i, group := range items {
 				if group.ID == a.groupID {
-					target = float32(i) * (groupWidth + 2)
+					target, targetWidth = x, widths[i]
 				}
+				x += widths[i] + 2
 			}
-			if a.filterFlow.width() != groupWidth {
-				a.filterFlow = filterFlow{target: target, targetWidth: groupWidth}
-			} else if a.filterFlow.target != target {
+			if a.filterFlow.targetWidth == 0 {
+				a.filterFlow = filterFlow{target: target, targetWidth: targetWidth}
+			} else if a.filterFlow.target != target || a.filterFlow.targetWidth != targetWidth {
 				left, right, _ := a.filterFlow.edges(c.Now())
-				a.filterFlow = filterFlow{left: left, right: right, target: target, targetWidth: groupWidth, started: c.Now()}
+				a.filterFlow = filterFlow{left: left, right: right, target: target, targetWidth: targetWidth, started: c.Now()}
 			}
-			trackWidth := float32(len(items))*(groupWidth+2) - 2
+			trackWidth := used
 			ui.RadioGroup(c.Key("groups"), func() {
-				for _, group := range items {
+				for i, group := range items {
 					label := group.label(locale)
-					chip := ui.RadioBase(c.Key(group.ID), &a.groupID, group.ID).Size(groupWidth, 28).
+					chip := ui.RadioBase(c.Key(group.ID), &a.groupID, group.ID).Size(widths[i], 28).
 						Center().PaddingX(9).Radius(14).Cursor(ui.CursorPointer).Label(label).Description(label).
 						OnChange(func() { a.selectGroup(group.ID) })
 					ink := t.TextMuted

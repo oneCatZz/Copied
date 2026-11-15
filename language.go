@@ -59,7 +59,7 @@ func (a *app) languageOptions(c *ui.Context) {
 	})
 }
 
-func filterLabelsFor(locale string) [7]string {
+func filterLabelsFor(locale string) [8]string {
 	tx := locales.In(locale)
-	return [7]string{tx.All(), tx.Text(), tx.Code(), tx.Links(), tx.Images(), tx.Files(), tx.Favorites()}
+	return [8]string{tx.All(), tx.Text(), tx.Code(), tx.Links(), tx.Colors(), tx.Images(), tx.Files(), tx.Favorites()}
 }

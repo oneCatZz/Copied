@@ -195,6 +195,7 @@ func (a *app) clearHistory() {
 		return
 	}
 	a.closeTrayMenu()
+	a.pruneStack()
 	if a.panel != nil && a.panel.IsVisible() {
 		a.reload()
 		a.panel.Invalidate()

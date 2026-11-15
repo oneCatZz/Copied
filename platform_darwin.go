@@ -6,6 +6,7 @@ import (
 
 	"github.com/ebitengine/purego"
 	"github.com/ebitengine/purego/objc"
+	"github.com/egoist/mygo"
 )
 
 var (
@@ -31,7 +32,10 @@ func frontWindow() uintptr { return 0 }
 const (
 	keyCodeV            = 9
 	eventFlagMaskCmd    = 1 << 20
-	eventTapHID         = 0
+	eventTapSession     = 1                     // kCGSessionEventTap
+	eventStatePrivate   = -1                    // kCGEventSourceStatePrivate
+	eventStateHID       = 1                     // kCGEventSourceStateHIDSystemState
+	eventFlagsHeld      = 1<<17 | 1<<18 | 1<<19 // Shift, Control, Option
 	coreGraphicsLibrary = "/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics"
 	coreFoundationLib   = "/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation"
 )
@@ -39,15 +43,34 @@ const (
 var (
 	loadEvents            sync.Once
 	eventsLoaded          bool
+	cgEventSourceCreate   func(state int32) uintptr
 	cgEventCreateKeyboard func(source uintptr, key uint16, down bool) uintptr
 	cgEventSetFlags       func(event uintptr, flags uint64)
 	cgEventPost           func(tap uint32, event uintptr)
 	cfRelease             func(ref uintptr)
+	cgEventSourceFlags    func(state int32) uint64
+	cgEventPostToPid      func(pid int32, event uintptr)
 )
+
+var (
+	selSharedWorkspace   = objc.RegisterName("sharedWorkspace")
+	selFrontmostApp      = objc.RegisterName("frontmostApplication")
+	selProcessIdentifier = objc.RegisterName("processIdentifier")
+)
+
+// waitForModifiersUp has nothing to wait for on macOS: pasteInto's keys
+// leave out those the user holds, so the user may keep holding the stack's
+// shortcut and press V again for the next clip.
+func waitForModifiersUp() {}
 
 // pasteInto presses Command+V in the app the user is in. macOS lets the app
 // do so once the user allowed it in System Settings, Privacy & Security,
 // Accessibility; until then the clip is on the clipboard, to paste by hand.
+//
+// The keys come from a private event source. Posted to the session, they
+// take on the modifiers the user holds: Option still held from the stack's
+// shortcut would make Command+Option+V. While one is held, they go to the
+// frontmost app itself instead.
 func pasteInto(uintptr) {
 	loadEvents.Do(func() {
 		cg, err := purego.Dlopen(coreGraphicsLibrary, purego.RTLD_LAZY|purego.RTLD_GLOBAL)
@@ -58,23 +81,52 @@ func pasteInto(uintptr) {
 		if err != nil {
 			return
 		}
+		purego.RegisterLibFunc(&cgEventSourceCreate, cg, "CGEventSourceCreate")
 		purego.RegisterLibFunc(&cgEventCreateKeyboard, cg, "CGEventCreateKeyboardEvent")
 		purego.RegisterLibFunc(&cgEventSetFlags, cg, "CGEventSetFlags")
 		purego.RegisterLibFunc(&cgEventPost, cg, "CGEventPost")
 		purego.RegisterLibFunc(&cfRelease, cf, "CFRelease")
+		purego.RegisterLibFunc(&cgEventSourceFlags, cg, "CGEventSourceFlagsState")
+		purego.RegisterLibFunc(&cgEventPostToPid, cg, "CGEventPostToPid")
 		eventsLoaded = true
 	})
 	if !eventsLoaded {
 		return
 	}
 	time.Sleep(80 * time.Millisecond) // until the app has the keyboard back
+	source := cgEventSourceCreate(eventStatePrivate)
+	if source == 0 {
+		return
+	}
+	defer cfRelease(source)
+	var pid int32
+	held := cgEventSourceFlags(eventStateHID)
+	if held&eventFlagsHeld != 0 {
+		pid = frontmostPID()
+	}
 	for _, down := range []bool{true, false} {
-		event := cgEventCreateKeyboard(0, keyCodeV, down)
+		event := cgEventCreateKeyboard(source, keyCodeV, down)
 		if event == 0 {
 			return
 		}
 		cgEventSetFlags(event, eventFlagMaskCmd)
-		cgEventPost(eventTapHID, event)
+		if pid > 0 {
+			cgEventPostToPid(pid, event)
+		} else {
+			cgEventPost(eventTapSession, event)
+		}
 		cfRelease(event)
 	}
+}
+
+// frontmostPID returns the process of the app the user is in, or 0.
+func frontmostPID() int32 {
+	var pid int32
+	mygo.RunOnMain(func() {
+		app := objc.ID(objc.GetClass("NSWorkspace")).Send(selSharedWorkspace).Send(selFrontmostApp)
+		if app != 0 {
+			pid = int32(app.Send(selProcessIdentifier))
+		}
+	})
+	return pid
 }

@@ -3,6 +3,6 @@
   "identifier": "com.example.copied",
   "version": "0.1.0",
   "out": "build",
-  "macos": { "infoPlist": { "LSUIElement": true } },
+  "macos": { "infoPlist": { "LSUIElement": true }, "entitlements": "macos.entitlements.plist" },
   "i18n": { "dir": "locales", "source": "en" }
 }

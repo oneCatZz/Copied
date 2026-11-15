@@ -78,5 +78,17 @@
   "deleteGroupHint": "只移除分组，其中的剪贴板内容仍保留在历史中。",
   "keepGrouped": "保留分组内容",
   "cancel": "取消",
-  "save": "保存"
+  "save": "保存",
+  "colors": "颜色",
+  "addToStack": "加入 Stack",
+  "removeFromStack": "移出 Stack",
+  "stackCount": "Stack · {count, number}",
+  "clearStack": "清空 Stack",
+  "pasteNext": "顺序粘贴",
+  "pickedCount": "已选 {count, number} 项",
+  "pasteAll": "批量粘贴",
+  "copyAll": "批量复制",
+  "clearSelection": "取消选择",
+  "multiSelect": "多选",
+  "click": "点击"
 }
