@@ -155,4 +155,3 @@ func (a *app) stackStatus(c *ui.Context, width float32) {
 		clear.Children(func() { ui.Icon(c, iconClose).FontSize(10) })
 	})
 }
-

@@ -11,4 +11,3 @@ func frontWindow() uintptr { return 0 }
 // pasteInto does nothing here: the clip is on the clipboard, to paste by
 // hand.
 func pasteInto(uintptr) {}
-

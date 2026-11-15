@@ -47,9 +47,7 @@ jobs:
         if: runner.os == 'Windows'
         env:
           COPIED_NATIVE_TEST: "1"
-        run: |
-          gofmt -d platform_windows.go platform_windows_test.go
-          go test -count=1 -v -run '^TestWindowsPasteNative$' .
+        run: go test -count=1 -v -run '^TestWindowsPasteNative$' .
       - name: Check MyGo UI lifetimes
         run: go tool mygo vet .
       - name: Import macOS signing certificate
@@ -82,4 +80,3 @@ jobs:
           path: ${{ matrix.path }}
           if-no-files-found: error
           retention-days: 14
-

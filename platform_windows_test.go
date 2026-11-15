@@ -11,12 +11,12 @@ import (
 
 func TestWindowsPasteIsolatesShortcutModifiers(t *testing.T) {
 	for name, keys := range map[string][]uint16{
-		"plain": nil,
-		"stack-held": {0xA2, 0xA4, vkV},
+		"plain":           nil,
+		"stack-held":      {0xA2, 0xA4, vkV},
 		"stack-right-alt": {0xA3, 0xA5, vkV},
-		"batch-shift": {0xA0},
-		"batch-control": {0xA2},
-		"all-modifiers": pasteModifiers[:],
+		"batch-shift":     {0xA0},
+		"batch-control":   {0xA2},
+		"all-modifiers":   pasteModifiers[:],
 	} {
 		t.Run(name, func(t *testing.T) {
 			state := map[uint16]bool{}
@@ -94,12 +94,12 @@ func TestWindowsPasteNative(t *testing.T) {
 		user32.NewProc("SetFocus").Call(hwnd)
 		ready <- hwnd
 		var msg struct {
-			hwnd uintptr
-			message uint32
+			hwnd           uintptr
+			message        uint32
 			wParam, lParam uintptr
-			time uint32
-			x, y int32
-			private uint32
+			time           uint32
+			x, y           int32
+			private        uint32
 		}
 		for {
 			select {
@@ -123,7 +123,7 @@ func TestWindowsPasteNative(t *testing.T) {
 		t.Fatal("could not create native paste receiver")
 	}
 	defer func() { close(stop); <-done }()
-	send := func(inputs []keyboardInput) {
+	send := func(t *testing.T, inputs []keyboardInput) {
 		t.Helper()
 		if n, _, err := procSendInput.Call(uintptr(len(inputs)), uintptr(unsafe.Pointer(&inputs[0])), unsafe.Sizeof(inputs[0])); n != uintptr(len(inputs)) {
 			t.Fatalf("SendInput: %d/%d: %v", n, len(inputs), err)
@@ -131,7 +131,7 @@ func TestWindowsPasteNative(t *testing.T) {
 	}
 	for _, tc := range []struct {
 		name, text string
-		keys []uint16
+		keys       []uint16
 	}{
 		{"single", "single clip", nil},
 		{"stack", "stack next clip", []uint16{0xA2, 0xA4, vkV}},
@@ -147,19 +147,19 @@ func TestWindowsPasteNative(t *testing.T) {
 				released = append(released, pasteKey(vk, true))
 			}
 			if len(pressed) > 0 {
-				send(pressed)
-				defer send(released)
+				send(t, pressed)
+				defer send(t, released)
 			}
 			pasteInto(hwnd) // keys stay down until after the paste is received
 			var got string
-			for deadline := time.Now().Add(2*time.Second); time.Now().Before(deadline); {
+			for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); {
 				var buf [256]uint16
 				user32.NewProc("GetWindowTextW").Call(hwnd, uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)))
 				got = syscall.UTF16ToString(buf[:])
 				if got == tc.text {
 					return
 				}
-				time.Sleep(10*time.Millisecond)
+				time.Sleep(10 * time.Millisecond)
 			}
 			t.Fatalf("native control received %q, want %q", got, tc.text)
 		})
@@ -179,7 +179,7 @@ func setNativePasteText(t *testing.T, hwnd uintptr, text string) {
 			opened = true
 			break
 		}
-		time.Sleep(10*time.Millisecond)
+		time.Sleep(10 * time.Millisecond)
 	}
 	if !opened {
 		t.Fatal("clipboard stayed busy")
@@ -195,7 +195,7 @@ func setNativePasteText(t *testing.T, hwnd uintptr, text string) {
 		kernel.NewProc("GlobalFree").Call(h)
 		t.Fatal("GlobalLock failed")
 	}
-	copy(unsafe.Slice((*uint16)(unsafe.Pointer(p)), len(u)), u)
+	syscall.NewLazyDLL("ntdll.dll").NewProc("RtlMoveMemory").Call(p, uintptr(unsafe.Pointer(&u[0])), uintptr(2*len(u)))
 	kernel.NewProc("GlobalUnlock").Call(h)
 	if ok, _, _ := user32.NewProc("SetClipboardData").Call(13, h); ok == 0 {
 		kernel.NewProc("GlobalFree").Call(h)

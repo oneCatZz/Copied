@@ -125,4 +125,3 @@ func frontmostPID() int32 {
 	})
 	return pid
 }
-

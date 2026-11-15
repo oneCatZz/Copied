@@ -31,11 +31,11 @@ func frontWindow() uintptr {
 }
 
 const (
-	inputKeyboard  = 1
-	keyEventFKeyUp = 0x0002
+	inputKeyboard    = 1
+	keyEventFKeyUp   = 0x0002
 	keyEventExtended = 0x0001
-	vkControl      = 0x11
-	vkV            = 0x56
+	vkControl        = 0x11
+	vkV              = 0x56
 )
 
 // keyboardInput is INPUT with its KEYBDINPUT, as laid out on 64-bit Windows.
@@ -113,4 +113,3 @@ func pasteInto(target uintptr) {
 		log.Printf("paste: SendInput sent %d/%d events: %v", n, len(inputs), err)
 	}
 }
-

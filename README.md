@@ -207,4 +207,3 @@ Windows 正式构建可用 `scripts/measure-private-memory.ps1` 比较私有提�
 | `resources/` | 应用图标、Windows 彩色托盘图标及 macOS 模板图标，包含 SVG 源文件 |
 | `macos.entitlements.plist` | macOS 签名权限：允许自签名构建加载内置 SQLite 动态库 |
 | `scripts/` | MyGo 补丁准备、CI 签名证书导入、Windows 内存测量 |
-
