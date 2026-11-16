@@ -1033,3 +1033,23 @@ func PreviewTruncated() string { return In(i18n.Locale()).PreviewTruncated() }
 func (msgs Messages) PreviewTruncated() string {
 	return Catalog.Format(msgs.locale, "previewTruncated", nil)
 }
+
+// ViewImage says "View larger"
+// in the language the app shows.
+func ViewImage() string { return In(i18n.Locale()).ViewImage() }
+
+// ViewImage says "View larger"
+// in the language of msgs.
+func (msgs Messages) ViewImage() string {
+	return Catalog.Format(msgs.locale, "viewImage", nil)
+}
+
+// ImageViewerHint says "Scroll or pinch to zoom · Drag to move · Double-click to fit · Space or Esc to close"
+// in the language the app shows.
+func ImageViewerHint() string { return In(i18n.Locale()).ImageViewerHint() }
+
+// ImageViewerHint says "Scroll or pinch to zoom · Drag to move · Double-click to fit · Space or Esc to close"
+// in the language of msgs.
+func (msgs Messages) ImageViewerHint() string {
+	return Catalog.Format(msgs.locale, "imageViewerHint", nil)
+}

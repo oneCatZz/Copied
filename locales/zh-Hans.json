@@ -99,5 +99,7 @@
   "stackShortcutReserved": "请使用其他组合键，Ctrl/⌘+V 用于普通粘贴。",
   "lineCount": "{count} 行",
   "wrapLines": "自动换行",
-  "previewTruncated": "预览已截断，粘贴时仍为完整内容。"
+  "previewTruncated": "预览已截断，粘贴时仍为完整内容。",
+  "viewImage": "查看大图",
+  "imageViewerHint": "滚轮或双指捏合缩放 · 拖动移动 · 双击适应窗口 · 空格或 Esc 关闭"
 }
