@@ -387,7 +387,11 @@ func (a *app) row(c *ui.Context, i int, clip *Clip) (action func()) {
 		}
 		ui.Column(c).Grow(1).Basis(0).MinWidth(0).Gap(3).Children(func() {
 			ui.Text(c, rowTitle(clip, c.Locale())).FontSize(12.5).FontWeight(500).SingleLine()
-			ui.Text(c, ago(clip.UsedAt, c.Locale())+" · "+clip.detail(c.Locale())).FontSize(11).TextColor(t.TextMuted).SingleLine()
+			meta := ago(clip.UsedAt, c.Locale())
+			if clip.Source != "" {
+				meta += " · " + clip.Source
+			}
+			ui.Text(c, meta+" · "+clip.detail(c.Locale())).FontSize(11).TextColor(t.TextMuted).SingleLine()
 		})
 		if len(clip.GroupIDs) > 0 || clip.Pinned {
 			ui.Icon(c, iconFolder).FontSize(12).Shrink(0).TextColor(kindColor(KindFiles, t.Dark)).Description(tx.Groups())

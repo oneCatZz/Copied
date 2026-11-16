@@ -263,6 +263,7 @@ func (a *app) watch() {
 		if skip {
 			continue
 		}
+		clip.Source = clipboardSource()
 		large := len(clip.Data) > 0
 		if err := a.store.Add(clip); err != nil {
 			log.Print("recording a clip: ", err)

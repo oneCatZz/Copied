@@ -294,7 +294,11 @@ func (a *app) detail(c *ui.Context) (action func()) {
 					ui.Text(c, tx.WrapLines()).FontSize(11).TextColor(ink).SingleLine()
 				})
 			}
-			ui.Text(c, ago(clip.UsedAt, c.Locale())).FontSize(11).TextColor(t.TextMuted).SingleLine()
+			when := ago(clip.UsedAt, c.Locale())
+			if clip.Source != "" {
+				when = clip.Source + " · " + when
+			}
+			ui.Text(c, when).FontSize(11).TextColor(t.TextMuted).SingleLine()
 		})
 		ui.Box(c).Height(1).Shrink(0).Background(t.Border)
 

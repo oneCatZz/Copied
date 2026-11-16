@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"sync"
 	"time"
 
@@ -28,6 +29,27 @@ func clipboardSeq() (seq int64, ok bool) {
 // activating the app, and the app the user was in has it back as the panel
 // hides.
 func frontWindow() uintptr { return 0 }
+
+var (
+	selLocalizedName = objc.RegisterName("localizedName")
+	selUTF8String    = objc.RegisterName("UTF8String")
+)
+
+// clipboardSource names the app in front, as the user copies in it as a
+// rule: macOS does not record which app wrote the clipboard.
+func clipboardSource() string {
+	var name string
+	mygo.RunOnMain(func() {
+		app := objc.ID(objc.GetClass("NSWorkspace")).Send(selSharedWorkspace).Send(selFrontmostApp)
+		if app == 0 || int32(app.Send(selProcessIdentifier)) == int32(os.Getpid()) {
+			return
+		}
+		if s := app.Send(selLocalizedName); s != 0 {
+			name = objc.Send[string](s, selUTF8String)
+		}
+	})
+	return name
+}
 
 func writeImage(data []byte) error { return mygo.Clipboard.WriteImage(data) }
 
