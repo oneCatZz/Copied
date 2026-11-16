@@ -31,6 +31,11 @@ func frontWindow() uintptr { return 0 }
 
 func writeImage(data []byte) error { return mygo.Clipboard.WriteImage(data) }
 
+// terminalWindow is never known on macOS: a picture is pasted as one.
+func terminalWindow(uintptr) bool { return false }
+
+func writeImageText(data []byte, _ string) error { return writeImage(data) }
+
 const (
 	keyCodeV            = 9
 	eventFlagMaskCmd    = 1 << 20

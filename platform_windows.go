@@ -28,6 +28,7 @@ var (
 	procRegisterClipboardFormatW   = user32.NewProc("RegisterClipboardFormatW")
 	procMsgWaitForMultipleObjects  = user32.NewProc("MsgWaitForMultipleObjectsEx")
 	procPeekMessageW               = user32.NewProc("PeekMessageW")
+	procGetClassNameW              = user32.NewProc("GetClassNameW")
 	kernel32                       = syscall.NewLazyDLL("kernel32.dll")
 	procGlobalAlloc                = kernel32.NewProc("GlobalAlloc")
 	procGlobalLock                 = kernel32.NewProc("GlobalLock")
@@ -37,6 +38,7 @@ var (
 )
 
 const (
+	cfUnicodeText   = 13
 	cfDIB           = 8
 	gmemMoveable    = 0x0002
 	qsSendMessage   = 0x0040
@@ -48,7 +50,11 @@ const (
 // at once, as screenshot tools do. MyGo offers a picture through OLE,
 // rendered on demand, and some readers got nothing of it: Windows Forms,
 // by which Claude Code reads one, among them.
-func writeImage(data []byte) error {
+func writeImage(data []byte) error { return writeImageText(data, "") }
+
+// writeImageText puts a PNG on the clipboard as writeImage does, and text
+// along with it unless it is empty.
+func writeImageText(data []byte, text string) error {
 	img, err := png.Decode(bytes.NewReader(data))
 	if err != nil {
 		return err
@@ -67,7 +73,35 @@ func writeImage(data []byte) error {
 	if pngFormat != 0 {
 		setClipboardData(pngFormat, data)
 	}
+	if text != "" {
+		units, err := syscall.UTF16FromString(text)
+		if err != nil {
+			return err
+		}
+		b := make([]byte, 2*len(units))
+		for i, u := range units {
+			binary.LittleEndian.PutUint16(b[2*i:], u)
+		}
+		if !setClipboardData(cfUnicodeText, b) {
+			return errors.New("cannot put the text on the clipboard")
+		}
+	}
 	return nil
+}
+
+// terminalWindow reports whether a window is a terminal's: Windows
+// Terminal's, the console's or mintty's (Git Bash).
+func terminalWindow(h uintptr) bool {
+	if h == 0 {
+		return false
+	}
+	var name [64]uint16
+	n, _, _ := procGetClassNameW.Call(h, uintptr(unsafe.Pointer(&name[0])), uintptr(len(name)))
+	switch syscall.UTF16ToString(name[:n]) {
+	case "CASCADIA_HOSTING_WINDOW_CLASS", "ConsoleWindowClass", "mintty":
+		return true
+	}
+	return false
 }
 
 // openClipboard opens the clipboard, waiting at most a second while

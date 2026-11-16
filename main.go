@@ -190,10 +190,10 @@ func (a *app) copyClip(id int64, plain bool) bool {
 // paste copies a clip, hides the panel and pastes into the app the user
 // was in.
 func (a *app) paste(i int, plain bool) {
-	if !a.copy(i, plain) {
+	target := a.target
+	if !a.copyForTerminal(i, target) && !a.copy(i, plain) {
 		return
 	}
-	target := a.target
 	a.panel.Hide()
 	go pasteInto(target)
 }
