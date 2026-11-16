@@ -250,6 +250,13 @@ func (a *app) header(c *ui.Context) {
 				})
 			input.PopoverMenu(func(m *ui.Menu) { m.EditItems() })
 			if input.Changed() {
+				// A space typed first, over a picture, shows it rather than
+				// searching: the search field has the keys while the panel shows.
+				if a.query != "" && strings.TrimSpace(a.query) == "" && a.choosingImage() {
+					a.query = ""
+					a.preview.viewing = true
+					return
+				}
 				a.chosen, a.scrollTo = 0, true
 				a.reload()
 			}
