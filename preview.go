@@ -1,8 +1,7 @@
 package main
 
 import (
-	"bytes"
-	"encoding/json"
+	"context"
 	"fmt"
 	"log"
 	"net/url"
@@ -31,9 +30,10 @@ type previewKey struct {
 // clipPreview is the whole text of the chosen clip, as far as the preview
 // shows it. It is read off the UI thread when the list holds only its start.
 type clipPreview struct {
-	id     int64
-	gen    uint64 // advances as the preview changes clips, to reject stale reads
-	loaded bool
+	id       int64
+	gen      uint64 // advances as the preview changes clips, to reject stale reads
+	loaded   bool
+	original *thumb // the whole picture of an image clip, once it decoded
 	previewBody
 }
 
@@ -46,6 +46,9 @@ type previewBody struct {
 
 // reset forgets the preview, and any read on its way.
 func (p *clipPreview) reset() {
+	if p.original != nil {
+		p.original.cancel()
+	}
 	*p = clipPreview{gen: p.gen + 1}
 }
 
@@ -60,6 +63,7 @@ func (a *app) previewOf(clip *Clip) *clipPreview {
 	p.id = clip.ID
 	if clip.Kind == KindImage {
 		p.loaded = true
+		a.loadOriginal(p, clip.ID)
 		return p
 	}
 	if utf8.RuneCountInString(clip.Text) < previewRunes {
@@ -92,11 +96,10 @@ func preparePreview(kind Kind, text string) previewBody {
 	if kind == KindCode {
 		language, _, _ = detectCode(text)
 		text = stripFence(strings.Trim(text, "\n"))
-		if language == "JSON" && strings.Count(text[:min(len(text), codeDetectLimit)], "\n") < 2 {
-			var buf bytes.Buffer
-			if json.Indent(&buf, []byte(strings.TrimSpace(text)), "", "  ") == nil {
-				text = buf.String()
-			}
+		// Minified JSON, or JSON lines as a stream sends them, is laid out;
+		// JSON laid out already keeps its own lines.
+		if language == "JSON" && hasLongLine(text[:min(len(text), codeDetectLimit)], 200) {
+			text = formatJSON(strings.TrimSpace(text))
 		}
 	} else {
 		text = strings.TrimSpace(text)
@@ -108,6 +111,114 @@ func preparePreview(kind Kind, text string) previewBody {
 		body.code = highlightCode(language, body.text, previewMaxLines)
 	}
 	return body
+}
+
+// loadOriginal decodes the whole picture of an image clip off the UI
+// thread; the preview shows its thumbnail until then. Without a window to
+// publish to, it stays with the thumbnail.
+func (a *app) loadOriginal(p *clipPreview, id int64) {
+	if a.store == nil || a.panel == nil {
+		return
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	th := &thumb{cancel: cancel}
+	p.original = th
+	store, panel := a.store, a.panel
+	go func() {
+		defer cancel()
+		data := store.Image(id)
+		if ctx.Err() != nil || len(data) == 0 {
+			return
+		}
+		bitmap, err := ui.DecodeBitmap(data)
+		if err != nil || ctx.Err() != nil {
+			return
+		}
+		panel.Update(func() {
+			if a.preview.original == th {
+				th.bitmap = bitmap
+			}
+		})
+	}()
+}
+
+// hasLongLine reports whether a line of s is longer than n bytes.
+func hasLongLine(s string, n int) bool {
+	for len(s) > n {
+		end := strings.IndexByte(s, '\n')
+		if end < 0 || end > n {
+			return true
+		}
+		s = s[end+1:]
+	}
+	return false
+}
+
+// formatJSON lays JSON out one value per line. It does not validate it:
+// a text cut short, NaN or several values in turn are laid out as far as
+// they go.
+func formatJSON(s string) string {
+	var b strings.Builder
+	b.Grow(len(s) + len(s)/4)
+	depth := 0
+	newline := func() {
+		b.WriteByte('\n')
+		for range depth {
+			b.WriteString("  ")
+		}
+	}
+	space := func(ch byte) bool { return ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n' }
+	inString, escaped := false, false
+	for i := 0; i < len(s); i++ {
+		ch := s[i]
+		if inString {
+			b.WriteByte(ch)
+			switch {
+			case escaped:
+				escaped = false
+			case ch == '\\':
+				escaped = true
+			case ch == '"':
+				inString = false
+			}
+			continue
+		}
+		switch {
+		case space(ch):
+			// The layout takes the place of the spaces between values.
+		case ch == '{' || ch == '[':
+			if depth == 0 && b.Len() > 0 {
+				newline() // another value after the first
+			}
+			b.WriteByte(ch)
+			j := i + 1
+			for j < len(s) && space(s[j]) {
+				j++
+			}
+			if j < len(s) && (s[j] == '}' || s[j] == ']') {
+				b.WriteByte(s[j]) // empty, on one line
+				i = j
+				continue
+			}
+			depth++
+			newline()
+		case ch == '}' || ch == ']':
+			depth = max(0, depth-1)
+			newline()
+			b.WriteByte(ch)
+		case ch == ',':
+			b.WriteByte(ch)
+			newline()
+		case ch == ':':
+			b.WriteString(": ")
+		case ch == '"':
+			inString = true
+			b.WriteByte(ch)
+		default:
+			b.WriteByte(ch)
+		}
+	}
+	return b.String()
 }
 
 // stripFence leaves out the fences around a Markdown code block.
@@ -160,8 +271,8 @@ func (a *app) detail(c *ui.Context) (action func()) {
 	hue := kindColor(clip.Kind, t.Dark)
 	textual := clip.Kind == KindText || clip.Kind == KindCode
 
-	ui.Column(c.Key("detail")).Grow(1).Basis(0).MinWidth(0).Radius(14).Background(t.Surface).
-		Border(1, t.Border).Children(func() {
+	pane := ui.Column(c.Key("detail")).Grow(1).Basis(0).MinWidth(0)
+	paneSurface(c, pane).Children(func() {
 		ui.Row(c).Padding(12, 14, 10, 14).Gap(8).AlignItems(ui.Center).Children(func() {
 			ui.Box(c).Size(24, 24).Shrink(0).Center().Radius(8).Background(hue.Alpha(0.16)).Children(func() {
 				ui.Icon(c, kindIcon(clip.Kind)).FontSize(13).TextColor(hue)
@@ -250,6 +361,13 @@ func (a *app) previewContent(c *ui.Context, clip *Clip, p *clipPreview, hue ui.C
 		}
 		a.thumbLimit = thumbCacheLimit
 		ui.Box(c).Grow(1).Basis(0).Padding(14).Children(func() {
+			// The whole picture at its own size where it fits, its thumbnail
+			// until it decoded.
+			if original := p.original; original != nil && original.bitmap != nil {
+				image := ui.Image(c, original.bitmap).Fill().Fit(ui.ScaleDown).Radius(8)
+				original.releasePixels(c, image)
+				return
+			}
 			th := a.thumb(clip)
 			if th.bitmap != nil {
 				image := ui.Image(c, th.bitmap).Fill().Fit(ui.Contain).Radius(8)

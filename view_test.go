@@ -221,9 +221,23 @@ func TestPreviewKeepsImageAndCodeInBounds(t *testing.T) {
 }
 
 func TestPreparePreviewFormatsCutsAndStripsFences(t *testing.T) {
-	body := preparePreview(KindCode, `{"node":"result","label":[1,2]}`)
+	pad := strings.Repeat("x", 220)
+	body := preparePreview(KindCode, `{"node":"result","label":[1,2],"pad":"`+pad+`"}`)
 	if !strings.Contains(body.text, "\n  \"node\": \"result\",") || body.lines < 4 || body.truncated || body.code == nil {
 		t.Fatalf("minified JSON was not laid out: %+v", body)
+	}
+	body = preparePreview(KindCode, `{"node":"a","pad":"`+pad+`"}`+"\n"+`{"node":"b","pad":"`+pad+`"}`)
+	if !strings.Contains(body.text, "\n}\n{\n  \"node\": \"b\",") {
+		t.Fatalf("JSON lines were not laid out: %q", body.text[:min(len(body.text), 120)])
+	}
+	laidOut := "{\n  \"node\": \"result\"\n}"
+	if body = preparePreview(KindCode, laidOut); body.text != laidOut {
+		t.Fatalf("laid out JSON changed: %q", body.text)
+	}
+	got := formatJSON(`{"a": NaN, "s": "x,{y}\"", "e": {}, "b": [1, 2`)
+	want := "{\n  \"a\": NaN,\n  \"s\": \"x,{y}\\\"\",\n  \"e\": {},\n  \"b\": [\n    1,\n    2"
+	if got != want {
+		t.Fatalf("lenient JSON layout:\n%s\nwant:\n%s", got, want)
 	}
 	body = preparePreview(KindCode, "```go\nfunc main() {}\n```")
 	if body.text != "func main() {}" {

@@ -150,7 +150,7 @@ func (a *app) stackStatus(c *ui.Context, width float32) {
 		Background(t.Accent.Alpha(0.1)).Children(func() {
 		ui.Icon(c, iconStack).FontSize(12).TextColor(t.Accent)
 		ui.Text(c, tx.StackCount(len(a.stack))).FontSize(11).FontWeight(600).TextColor(t.Accent).SingleLine()
-		if a.stackKeys != "" && width >= 1100 {
+		if a.stackKeys != "" && width >= 900 {
 			for _, key := range keycaps(a.stackShortcut()) {
 				keycap(c, key)
 			}

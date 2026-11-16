@@ -234,6 +234,16 @@ func (s *Store) Text(id int64) (string, error) {
 	return str(rows.Values[0][0]), nil
 }
 
+// Image returns the whole PNG of an image clip, for its preview.
+func (s *Store) Image(id int64) []byte {
+	rows, err := s.db.Query(context.Background(), `SELECT data FROM clips WHERE id = ?`, id)
+	if err != nil || len(rows.Values) == 0 {
+		return nil
+	}
+	data, _ := rows.Values[0][0].([]byte)
+	return data
+}
+
 // Has reports whether a clip is still in the history.
 func (s *Store) Has(id int64) bool {
 	rows, err := s.db.Query(context.Background(), `SELECT 1 FROM clips WHERE id = ?`, id)

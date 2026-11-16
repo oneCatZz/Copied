@@ -14,10 +14,22 @@ import (
 )
 
 const (
-	listWidth = 360 // DIPs
-	rowHeight = 54
-	rowGap    = 4
+	listWidth = 340 // DIPs
+	rowHeight = 52
+	rowGap    = 2
 )
+
+// paneSurface is the look of the list and the preview: a raised sheet over
+// the panel, as the cards had.
+func paneSurface(c *ui.Context, pane ui.Element) ui.Element {
+	t := c.Theme()
+	depth := float32(0.04) // of the shadow, deeper on dark
+	if t.Dark {
+		depth = 0.12
+	}
+	return pane.Radius(14).Background(t.Surface).Border(1, t.Border).
+		Shadow(0, 1, 2, 0, ui.RGB(0, 0, 0).Alpha(depth)).Shadow(0, 8, 24, -12, ui.RGB(0, 0, 0).Alpha(depth*2))
+}
 
 // A placeholder must not inherit the full row's transition snapshot.
 type cardPlaceholder int64
@@ -297,21 +309,24 @@ func (a *app) list(c *ui.Context) (action func()) {
 		reveal := a.scrollTo && y+rowHeight >= chosenY-height-overscan && y <= chosenY+height+overscan
 		return i == a.chosen || near || reveal
 	}
-	ui.Scroll(c.Key("list")).TrackScroll(&a.listScroll).Width(listWidth).Shrink(0).Gap(rowGap).Children(func() {
-		for i, clip := range a.clips {
-			if !buildRow(i) {
-				if a.cardMenuID == clip.ID {
-					a.cardMenuID = 0
+	pane := ui.Column(c.Key("list-pane")).Width(listWidth).Shrink(0).Padding(6)
+	paneSurface(c, pane).Children(func() {
+		ui.Scroll(c.Key("list")).TrackScroll(&a.listScroll).Grow(1).Basis(0).Gap(rowGap).Children(func() {
+			for i, clip := range a.clips {
+				if !buildRow(i) {
+					if a.cardMenuID == clip.ID {
+						a.cardMenuID = 0
+					}
+					// Keep geometry and identity, without text layout for
+					// distant rows.
+					ui.Box(c.Key(cardPlaceholder(clip.ID))).Height(rowHeight).Shrink(0)
+					continue
 				}
-				// Keep geometry and identity, without text layout for
-				// distant rows.
-				ui.Box(c.Key(cardPlaceholder(clip.ID))).Height(rowHeight).Shrink(0)
-				continue
+				if act := a.row(c, i, clip); act != nil {
+					action = act
+				}
 			}
-			if act := a.row(c, i, clip); act != nil {
-				action = act
-			}
-		}
+		})
 	})
 	return action
 }
@@ -325,16 +340,14 @@ func (a *app) row(c *ui.Context, i int, clip *Clip) (action func()) {
 	hue := kindColor(clip.Kind, t.Dark)
 
 	row := ui.Row(c.Key(clip.ID)).Height(rowHeight).Shrink(0).PaddingX(10).Gap(10).AlignItems(ui.Center).
-		Radius(10).Cursor(ui.CursorPointer).Label(kindLabel(clip.Kind, c.Locale()))
+		Radius(9).Cursor(ui.CursorPointer).Label(kindLabel(clip.Kind, c.Locale()))
 	switch {
 	case selected:
-		row.Background(t.Accent.Alpha(0.13)).Border(1, t.Accent.Alpha(0.55))
+		row.Background(t.Accent.Alpha(0.11))
 	case picked:
-		row.Background(t.Accent.Alpha(0.07)).Border(1, t.Accent.Alpha(0.3))
+		row.Background(t.Accent.Alpha(0.06))
 	case row.Hovered():
-		row.Background(t.SurfaceHover).Border(1, ui.Transparent)
-	default:
-		row.Border(1, ui.Transparent)
+		row.Background(t.SurfaceHover)
 	}
 	// The rows rise one after the other as the panel shows.
 	if i < cardsRising {
@@ -361,19 +374,22 @@ func (a *app) row(c *ui.Context, i int, clip *Clip) (action func()) {
 	row.Children(func() {
 		switch {
 		case picked:
-			ui.Box(c).Size(30, 30).Shrink(0).Center().Radius(8).Background(t.Accent).Description(tx.PickedCount(len(a.picked))).Children(func() {
-				ui.Icon(c, filterCheckIcon).FontSize(14).TextColor(ui.RGB(255, 255, 255))
+			ui.Box(c).Size(28, 28).Shrink(0).Center().Radius(8).Background(t.Accent).Description(tx.PickedCount(len(a.picked))).Children(func() {
+				ui.Icon(c, filterCheckIcon).FontSize(13).TextColor(ui.RGB(255, 255, 255))
 			})
 		case clip.Kind == KindColor:
-			ui.Box(c).Size(30, 30).Shrink(0).Radius(8).Background(ui.Hex(strings.TrimSpace(clip.Text))).
+			ui.Box(c).Size(28, 28).Shrink(0).Radius(8).Background(ui.Hex(strings.TrimSpace(clip.Text))).
 				InsetShadow(0, 0, 0, 1, t.Text.Alpha(0.12))
 		default:
-			ui.Box(c).Size(30, 30).Shrink(0).Center().Radius(8).Background(hue.Alpha(0.16)).Children(func() {
-				ui.Icon(c, kindIcon(clip.Kind)).FontSize(14).TextColor(hue)
+			ui.Box(c).Size(28, 28).Shrink(0).Center().Radius(8).Background(hue.Alpha(0.13)).Children(func() {
+				ui.Icon(c, kindIcon(clip.Kind)).FontSize(13).TextColor(hue)
 			})
 		}
 		ui.Column(c).Grow(1).Basis(0).MinWidth(0).Gap(3).Children(func() {
-			ui.Text(c, rowTitle(clip, c.Locale())).FontSize(12.5).FontWeight(500).SingleLine()
+			title := ui.Text(c, rowTitle(clip, c.Locale())).FontSize(12.5).FontWeight(500).SingleLine()
+			if selected {
+				title.FontWeight(600)
+			}
 			ui.Text(c, ago(clip.UsedAt, c.Locale())+" · "+clip.detail(c.Locale())).FontSize(11).TextColor(t.TextMuted).SingleLine()
 		})
 		if len(clip.GroupIDs) > 0 || clip.Pinned {
@@ -385,8 +401,14 @@ func (a *app) row(c *ui.Context, i int, clip *Clip) (action func()) {
 				ui.Text(c, fmt.Sprint(n)).FontSize(10.5).FontWeight(650).TextColor(ui.RGB(255, 255, 255))
 			})
 		}
+		// The shortcut stays quiet in every row but the chosen one.
 		if i < len(digitKeys) {
-			keycap(c, cmdCap()+" "+fmt.Sprint(i+1))
+			key := cmdCap() + " " + fmt.Sprint(i+1)
+			if selected {
+				keycap(c, key)
+			} else {
+				ui.Text(c, key).FontSize(10.5).Shrink(0).TextColor(t.TextMuted.Alpha(0.75)).SingleLine()
+			}
 		}
 	})
 	return action
@@ -558,6 +580,10 @@ func (a *app) footer(c *ui.Context) {
 				break
 			}
 			if width < 900 && (i == 2 || i == 3 || i == 5) {
+				continue
+			}
+			// The stack's keys take the room of the less used hints.
+			if width < 1100 && len(a.stack) > 0 && (i == 2 || i == 3) {
 				continue
 			}
 			hint(h.keys, h.label)
