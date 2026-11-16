@@ -96,9 +96,9 @@ func preparePreview(kind Kind, text string) previewBody {
 	if kind == KindCode {
 		language, _, _ = detectCode(text)
 		text = stripFence(strings.Trim(text, "\n"))
-		// Minified JSON, or JSON lines as a stream sends them, is laid out;
-		// JSON laid out already keeps its own lines.
-		if language == "JSON" && hasLongLine(text[:min(len(text), codeDetectLimit)], 200) {
+		// JSON is laid out afresh, whether it came minified, as JSON lines
+		// or indented in a way of its own.
+		if language == "JSON" {
 			text = formatJSON(strings.TrimSpace(text))
 		}
 	} else {
@@ -142,21 +142,10 @@ func (a *app) loadOriginal(p *clipPreview, id int64) {
 	}()
 }
 
-// hasLongLine reports whether a line of s is longer than n bytes.
-func hasLongLine(s string, n int) bool {
-	for len(s) > n {
-		end := strings.IndexByte(s, '\n')
-		if end < 0 || end > n {
-			return true
-		}
-		s = s[end+1:]
-	}
-	return false
-}
-
 // formatJSON lays JSON out one value per line. It does not validate it:
 // a text cut short, NaN or several values in turn are laid out as far as
-// they go.
+// they go. A text with comments keeps its own layout, since a comment
+// runs to the end of its line.
 func formatJSON(s string) string {
 	var b strings.Builder
 	b.Grow(len(s) + len(s)/4)
@@ -214,6 +203,8 @@ func formatJSON(s string) string {
 		case ch == '"':
 			inString = true
 			b.WriteByte(ch)
+		case ch == '/':
+			return s
 		default:
 			b.WriteByte(ch)
 		}

@@ -230,9 +230,13 @@ func TestPreparePreviewFormatsCutsAndStripsFences(t *testing.T) {
 	if !strings.Contains(body.text, "\n}\n{\n  \"node\": \"b\",") {
 		t.Fatalf("JSON lines were not laid out: %q", body.text[:min(len(body.text), 120)])
 	}
-	laidOut := "{\n  \"node\": \"result\"\n}"
-	if body = preparePreview(KindCode, laidOut); body.text != laidOut {
-		t.Fatalf("laid out JSON changed: %q", body.text)
+	body = preparePreview(KindCode, "{\"node\": [\n            {\n    \"a\": 1\n            }\n        ]}")
+	if want := "{\n  \"node\": [\n    {\n      \"a\": 1\n    }\n  ]\n}"; body.text != want {
+		t.Fatalf("oddly indented JSON was not laid out: %q", body.text)
+	}
+	withComment := "{\n    \"a\": 1 // one\n}"
+	if body = preparePreview(KindCode, withComment); body.text != withComment {
+		t.Fatalf("JSON with a comment changed: %q", body.text)
 	}
 	got := formatJSON(`{"a": NaN, "s": "x,{y}\"", "e": {}, "b": [1, 2`)
 	want := "{\n  \"a\": NaN,\n  \"s\": \"x,{y}\\\"\",\n  \"e\": {},\n  \"b\": [\n    1,\n    2"
