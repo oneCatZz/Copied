@@ -29,6 +29,9 @@ func clipboardSeq() (seq int64, ok bool) {
 // hides.
 func frontWindow() uintptr { return 0 }
 
+// clipboardSource is not known on macOS yet.
+func clipboardSource() string { return "" }
+
 func writeImage(data []byte) error { return mygo.Clipboard.WriteImage(data) }
 
 // terminalWindow is never known on macOS: a picture is pasted as one.

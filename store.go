@@ -91,7 +91,23 @@ func openStoreAt(path string) (*Store, error) {
 		db.Close()
 		return nil, err
 	}
+	if err := s.migrateSource(ctx); err != nil {
+		db.Close()
+		return nil, err
+	}
 	return s, nil
+}
+
+// migrateSource adds the app a clip was copied from to a history that
+// lacks it. It looks for the column rather than at the version, which a
+// restored database may have older.
+func (s *Store) migrateSource(ctx context.Context) error {
+	rows, err := s.db.Query(ctx, `SELECT 1 FROM pragma_table_info('clips') WHERE name = 'source'`)
+	if err != nil || len(rows.Values) > 0 {
+		return err
+	}
+	_, err = s.db.Execute(ctx, `ALTER TABLE clips ADD COLUMN source TEXT NOT NULL DEFAULT ''`)
+	return err
 }
 
 // Existing text clips are classified once, without changing their content,
@@ -135,13 +151,14 @@ func (s *Store) Close() error { return s.db.Close() }
 func (s *Store) Add(c *Clip) error {
 	ctx := context.Background()
 	now := time.Now().UnixMilli()
-	_, err := s.db.Execute(ctx, `INSERT INTO clips (kind, text, html, data, thumb, width, height, length, hash, created_at, used_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	_, err := s.db.Execute(ctx, `INSERT INTO clips (kind, text, html, data, thumb, width, height, length, hash, source, created_at, used_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (hash) DO UPDATE SET
 			kind = excluded.kind,
 			used_at = excluded.used_at,
-			html = CASE WHEN excluded.html <> '' THEN excluded.html ELSE html END`,
-		string(c.Kind), c.Text, c.HTML, c.Data, c.Thumb, c.Width, c.Height, c.Length, c.Hash, now, now)
+			html = CASE WHEN excluded.html <> '' THEN excluded.html ELSE html END,
+			source = CASE WHEN excluded.source <> '' THEN excluded.source ELSE source END`,
+		string(c.Kind), c.Text, c.HTML, c.Data, c.Thumb, c.Width, c.Height, c.Length, c.Hash, c.Source, now, now)
 	if err != nil {
 		return err
 	}
@@ -184,7 +201,7 @@ func (s *Store) List(filter Filter, query string, groupID ...int64) ([]*Clip, er
 	}
 	args = append(args, listLimit)
 	rows, err := s.db.Query(context.Background(), `SELECT id, kind, substr(text, 1, ?), width, height, length, pinned, used_at,
-		(SELECT group_concat(group_id) FROM clip_groups WHERE clip_id = clips.id)
+		(SELECT group_concat(group_id) FROM clip_groups WHERE clip_id = clips.id), source
 		FROM clips WHERE `+strings.Join(where, " AND ")+` ORDER BY used_at DESC LIMIT ?`, args...)
 	if err != nil {
 		return nil, err
@@ -200,6 +217,7 @@ func (s *Store) List(filter Filter, query string, groupID ...int64) ([]*Clip, er
 			Length: int(integer(v[5])),
 			Pinned: integer(v[6]) != 0,
 			UsedAt: time.UnixMilli(integer(v[7])),
+			Source: str(v[9]),
 		}
 		for _, value := range strings.Split(str(v[8]), ",") {
 			if id, err := strconv.ParseInt(value, 10, 64); err == nil {

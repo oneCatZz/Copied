@@ -10,6 +10,9 @@ func clipboardSeq() (seq int64, ok bool) { return 0, false }
 
 func frontWindow() uintptr { return 0 }
 
+// clipboardSource is unknown here.
+func clipboardSource() string { return "" }
+
 func writeImage(data []byte) error { return mygo.Clipboard.WriteImage(data) }
 
 // terminalWindow is never known here: a picture is pasted as one.

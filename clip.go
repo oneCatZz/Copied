@@ -49,6 +49,7 @@ type Clip struct {
 	Hash   string
 	Pinned bool
 	UsedAt time.Time
+	Source string // the name of the app it was copied from, when known
 
 	GroupIDs []int64
 	code     *codePreview // bounded, lazily highlighted preview; never persisted
