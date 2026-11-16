@@ -29,8 +29,7 @@ func clipboardSeq() (seq int64, ok bool) {
 // hides.
 func frontWindow() uintptr { return 0 }
 
-// flushClipboard is for Windows' OLE clipboard; it does nothing here.
-func flushClipboard() {}
+func writeImage(data []byte) error { return mygo.Clipboard.WriteImage(data) }
 
 const (
 	keyCodeV            = 9

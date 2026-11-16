@@ -1,12 +1,16 @@
 package main
 
 import (
+	"bytes"
+	"encoding/binary"
+	"errors"
+	"image"
+	"image/draw"
+	"image/png"
 	"log"
 	"syscall"
 	"time"
 	"unsafe"
-
-	"github.com/egoist/mygo"
 )
 
 var (
@@ -17,16 +21,122 @@ var (
 	procIsWindow                   = user32.NewProc("IsWindow")
 	procSendInput                  = user32.NewProc("SendInput")
 	procGetAsyncKeyState           = user32.NewProc("GetAsyncKeyState")
+	procOpenClipboard              = user32.NewProc("OpenClipboard")
+	procCloseClipboard             = user32.NewProc("CloseClipboard")
+	procEmptyClipboard             = user32.NewProc("EmptyClipboard")
+	procSetClipboardData           = user32.NewProc("SetClipboardData")
+	procRegisterClipboardFormatW   = user32.NewProc("RegisterClipboardFormatW")
+	procMsgWaitForMultipleObjects  = user32.NewProc("MsgWaitForMultipleObjectsEx")
+	procPeekMessageW               = user32.NewProc("PeekMessageW")
+	kernel32                       = syscall.NewLazyDLL("kernel32.dll")
+	procGlobalAlloc                = kernel32.NewProc("GlobalAlloc")
+	procGlobalLock                 = kernel32.NewProc("GlobalLock")
+	procGlobalUnlock               = kernel32.NewProc("GlobalUnlock")
+	procGlobalFree                 = kernel32.NewProc("GlobalFree")
+	procRtlMoveMemory              = kernel32.NewProc("RtlMoveMemory")
 )
 
-// flushClipboard renders what the app put on the clipboard into it at
-// once. Left to be rendered on demand, a picture reached some readers
-// empty, such as Windows Forms, by which Claude Code reads it. MyGo waits
-// while Windows' clipboard history reads the change, as it does at once.
-func flushClipboard() {
-	if err := mygo.Clipboard.Flush(); err != nil {
-		log.Print("flushing the clipboard: ", err)
+const (
+	cfDIB           = 8
+	gmemMoveable    = 0x0002
+	qsSendMessage   = 0x0040
+	pmNoRemove      = 0x0000
+	pmQSSendMessage = qsSendMessage << 16
+)
+
+// writeImage puts a PNG on the clipboard as a bitmap (CF_DIB) and as PNG,
+// at once, as screenshot tools do. MyGo offers a picture through OLE,
+// rendered on demand, and some readers got nothing of it: Windows Forms,
+// by which Claude Code reads one, among them.
+func writeImage(data []byte) error {
+	img, err := png.Decode(bytes.NewReader(data))
+	if err != nil {
+		return err
 	}
+	dib := imageDIB(img)
+	name, _ := syscall.UTF16PtrFromString("PNG")
+	pngFormat, _, _ := procRegisterClipboardFormatW.Call(uintptr(unsafe.Pointer(name)))
+	if !openClipboard() {
+		return errors.New("the clipboard is busy")
+	}
+	defer procCloseClipboard.Call()
+	procEmptyClipboard.Call()
+	if !setClipboardData(cfDIB, dib) {
+		return errors.New("cannot put the picture on the clipboard")
+	}
+	if pngFormat != 0 {
+		setClipboardData(pngFormat, data)
+	}
+	return nil
+}
+
+// openClipboard opens the clipboard, waiting at most a second while
+// another program has it open, as Windows' clipboard history does right
+// after every change. That program may wait for this one to render what it
+// offered before, so the wait handles the messages sent to it.
+func openClipboard() bool {
+	deadline := time.Now().Add(time.Second)
+	for {
+		if ok, _, _ := procOpenClipboard.Call(0); ok != 0 {
+			return true
+		}
+		if time.Now().After(deadline) {
+			return false
+		}
+		procMsgWaitForMultipleObjects.Call(0, 0, 10, qsSendMessage, 0)
+		var m [48]byte // MSG
+		procPeekMessageW.Call(uintptr(unsafe.Pointer(&m[0])), 0, 0, 0, pmNoRemove|pmQSSendMessage)
+	}
+}
+
+// setClipboardData puts data in a format on the open, emptied clipboard,
+// which then owns its memory.
+func setClipboardData(format uintptr, data []byte) bool {
+	h, _, _ := procGlobalAlloc.Call(gmemMoveable, uintptr(len(data)))
+	if h == 0 {
+		return false
+	}
+	p, _, _ := procGlobalLock.Call(h)
+	if p == 0 {
+		procGlobalFree.Call(h)
+		return false
+	}
+	procRtlMoveMemory.Call(p, uintptr(unsafe.Pointer(&data[0])), uintptr(len(data)))
+	procGlobalUnlock.Call(h)
+	if r, _, _ := procSetClipboardData.Call(format, h); r == 0 {
+		procGlobalFree.Call(h)
+		return false
+	}
+	return true
+}
+
+// imageDIB lays a picture out as a bottom-up, 32-bit device independent
+// bitmap, its alpha in the fourth byte.
+func imageDIB(img image.Image) []byte {
+	b := img.Bounds()
+	nrgba, ok := img.(*image.NRGBA)
+	if !ok || nrgba.Rect.Min != (image.Point{}) {
+		nrgba = image.NewNRGBA(image.Rect(0, 0, b.Dx(), b.Dy()))
+		draw.Draw(nrgba, nrgba.Rect, img, b.Min, draw.Src)
+	}
+	w, h := nrgba.Rect.Dx(), nrgba.Rect.Dy()
+	out := make([]byte, 40+4*w*h)
+	le := binary.LittleEndian
+	le.PutUint32(out, 40)
+	le.PutUint32(out[4:], uint32(w))
+	le.PutUint32(out[8:], uint32(h))
+	le.PutUint16(out[12:], 1)
+	le.PutUint16(out[14:], 32)
+	le.PutUint32(out[20:], uint32(4*w*h))
+	i := 40
+	for y := h - 1; y >= 0; y-- {
+		row := nrgba.Pix[y*nrgba.Stride : y*nrgba.Stride+4*w]
+		for x := 0; x < len(row); x += 4 {
+			out[i], out[i+1], out[i+2], out[i+3] = row[x+2], row[x+1], row[x], row[x+3]
+			i += 4
+		}
+	}
+	return out
 }
 
 // clipboardSeq returns a number that changes with the clipboard's content.
