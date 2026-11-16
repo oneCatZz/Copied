@@ -100,6 +100,6 @@
   "lineCount": "{count, plural, one {# line} other {# lines}}",
   "wrapLines": "Wrap lines",
   "previewTruncated": "Preview shortened. Pasting keeps the full content.",
-  "imageActualHint": "Click the picture for actual size",
-  "imageCloseHint": "Click outside or press Esc to close"
+  "viewImage": "View larger",
+  "imageViewerHint": "Scroll or pinch to zoom · Drag to move · Double-click to fit · Space or Esc to close"
 }

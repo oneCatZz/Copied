@@ -56,7 +56,7 @@ func cmdCap() string {
 func (a *app) key(mods ui.Modifiers, key ui.Key) bool {
 	if a.preview.viewing {
 		// Over a picture shown large, keys only close it.
-		if mods == 0 && key == ui.KeyEscape {
+		if mods == 0 && (key == ui.KeyEscape || key == ui.KeySpace) {
 			a.preview.viewing = false
 		}
 		return true
@@ -91,6 +91,11 @@ func (a *app) key(mods ui.Modifiers, key ui.Key) bool {
 		a.paste(a.chosen, false)
 	case mods == ui.Shift && key == ui.KeyEnter:
 		a.paste(a.chosen, true)
+	case mods == 0 && key == ui.KeySpace:
+		if a.query != "" || !a.choosingImage() {
+			return false // typed in the search field
+		}
+		a.preview.viewing = true
 	case mods == ui.Cmd && key == ui.KeyEnter:
 		a.copyOnly(a.chosen)
 	case mods == ui.Cmd && key == ui.KeyBackspace:
@@ -114,6 +119,12 @@ func (a *app) key(mods ui.Modifiers, key ui.Key) bool {
 		return false
 	}
 	return true
+}
+
+// choosingImage reports whether the chosen clip is a picture, which Space
+// shows over the whole panel.
+func (a *app) choosingImage() bool {
+	return a.chosen >= 0 && a.chosen < len(a.clips) && a.clips[a.chosen].Kind == KindImage
 }
 
 func (a *app) view(c *ui.Context) {
@@ -157,6 +168,9 @@ func (a *app) view(c *ui.Context) {
 		}
 		if a.query != "" || len(a.picked) > 0 {
 			combos = append(combos, combo{0, ui.KeyEscape})
+		}
+		if a.query == "" && a.choosingImage() && !a.preview.viewing {
+			combos = append(combos, combo{0, ui.KeySpace})
 		}
 		for _, digit := range digitKeys {
 			combos = append(combos, combo{ui.Cmd, digit})
@@ -573,6 +587,9 @@ func (a *app) footer(c *ui.Context) {
 		{[]string{cmd, "P"}, tx.AddToGroups()},
 		{[]string{cmd, "⌫"}, tx.Delete()},
 		{[]string{"esc"}, tx.Close()},
+	}
+	if a.choosingImage() {
+		hints[2].keys, hints[2].label = []string{"space"}, tx.ViewImage()
 	}
 	hint := func(keys []string, label string) {
 		ui.Row(c).Gap(4).AlignItems(ui.Center).Children(func() {

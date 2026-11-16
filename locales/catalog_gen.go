@@ -1034,22 +1034,22 @@ func (msgs Messages) PreviewTruncated() string {
 	return Catalog.Format(msgs.locale, "previewTruncated", nil)
 }
 
-// ImageActualHint says "Click the picture for actual size"
+// ViewImage says "View larger"
 // in the language the app shows.
-func ImageActualHint() string { return In(i18n.Locale()).ImageActualHint() }
+func ViewImage() string { return In(i18n.Locale()).ViewImage() }
 
-// ImageActualHint says "Click the picture for actual size"
+// ViewImage says "View larger"
 // in the language of msgs.
-func (msgs Messages) ImageActualHint() string {
-	return Catalog.Format(msgs.locale, "imageActualHint", nil)
+func (msgs Messages) ViewImage() string {
+	return Catalog.Format(msgs.locale, "viewImage", nil)
 }
 
-// ImageCloseHint says "Click outside or press Esc to close"
+// ImageViewerHint says "Scroll or pinch to zoom · Drag to move · Double-click to fit · Space or Esc to close"
 // in the language the app shows.
-func ImageCloseHint() string { return In(i18n.Locale()).ImageCloseHint() }
+func ImageViewerHint() string { return In(i18n.Locale()).ImageViewerHint() }
 
-// ImageCloseHint says "Click outside or press Esc to close"
+// ImageViewerHint says "Scroll or pinch to zoom · Drag to move · Double-click to fit · Space or Esc to close"
 // in the language of msgs.
-func (msgs Messages) ImageCloseHint() string {
-	return Catalog.Format(msgs.locale, "imageCloseHint", nil)
+func (msgs Messages) ImageViewerHint() string {
+	return Catalog.Format(msgs.locale, "imageViewerHint", nil)
 }

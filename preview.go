@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math"
 	"net/url"
 	"strconv"
 	"strings"
@@ -35,7 +36,7 @@ type clipPreview struct {
 	loaded   bool
 	original *thumb // the whole picture of an image clip, once it decoded
 	viewing  bool   // the picture shows over the whole panel (imageViewer)
-	actual   bool   // there, at its own size, to scroll around in
+	view     viewer // where it shows there
 	previewBody
 }
 
@@ -438,58 +439,176 @@ func (a *app) previewContent(c *ui.Context, clip *Clip, p *clipPreview, hue ui.C
 	}
 }
 
-// imageViewer shows the chosen picture over the whole panel, as large as
-// it fits, while the preview is viewing it. A click on a picture too large
-// for the panel shows it at its own size, to scroll around in; a click
-// around it or Escape closes it.
+// Zoom of the picture shown over the whole panel.
+const (
+	viewerMaxScale = 8   // the largest, eight times its own size
+	viewerStep     = 1.2 // a notch of a mouse wheel
+)
+
+// viewer is where the picture shown over the whole panel is, as the
+// pointer zooms and moves it.
+type viewer struct {
+	scale        float32 // of the picture's own size; 0 fits it in the stage
+	x, y         float32 // its middle, from the middle of the stage
+	pressed      bool
+	moved        bool // the press drags the picture, rather than clicks
+	downX, downY float32
+	lastX, lastY float32
+	shown        bool // in the last frame
+}
+
+// imageViewer shows the chosen picture over the whole panel while the
+// preview is viewing it, fitted in at first. A mouse wheel, a pinch of a
+// touchpad or Cmd/Ctrl with scrolling zooms it at the pointer; dragging it,
+// or scrolling a touchpad, moves it. A double click fits it in again, and
+// a click beside it, Space or Escape closes it.
 func (a *app) imageViewer(c *ui.Context) {
 	p := &a.preview
-	if p.viewing && (p.original == nil || p.original.bitmap == nil) {
-		p.viewing = false
-	}
+	v := &p.view
 	tx := locales.In(c.Locale())
 	ui.DialogBase(c.Key("image-viewer"), &p.viewing, func(backdrop, panel ui.Element) {
-		original := p.original
-		if original == nil || original.bitmap == nil {
-			return
-		}
 		width, height := c.Size()
-		backdrop.Background(ui.RGBA(0, 0, 0, 0.72))
-		panel.Column().Gap(10).AlignItems(ui.Center)
-		w, h := original.bitmap.Size()
-		iw, ih := float32(w), float32(h)
-		roomW, roomH := max(1, width-48), max(1, height-48-28)
-		fits := iw <= roomW && ih <= roomH
-		if fits {
-			p.actual = false
+		backdrop.Background(ui.RGBA(0, 0, 0, 0.78))
+		panel.Column().Gap(8).AlignItems(ui.Center)
+		stageW, stageH := max(1, width-32), max(1, height-32-26)
+
+		original := p.original
+		ready := original != nil && original.bitmap != nil
+		var iw, ih, fit float32
+		if ready {
+			w, h := original.bitmap.Size()
+			iw, ih = float32(max(w, 1)), float32(max(h, 1))
+			fit = min(stageW/iw, stageH/ih, 1)
 		}
-		show := func(sw, sh float32, cursor ui.Cursor) {
-			image := ui.Image(c.Key("viewer-image"), original.bitmap).Size(sw, sh).Shrink(0).Radius(8)
-			if !fits {
-				image.Cursor(cursor)
-				if image.Clicked() {
-					p.actual = !p.actual
-				}
+		// clamp keeps the picture inside the stage where it fits, and the
+		// stage covered where it does not.
+		clamp := func() {
+			lx, ly := absf(iw*v.scale-stageW)/2, absf(ih*v.scale-stageH)/2
+			v.x, v.y = min(max(v.x, -lx), lx), min(max(v.y, -ly), ly)
+		}
+		if ready {
+			if v.scale < fit {
+				v.scale, v.x, v.y = fit, 0, 0
 			}
+			clamp()
+		}
+		// zoom scales the picture by k, keeping where it is under px, py.
+		zoom := func(k, px, py float32) {
+			if !ready || k <= 0 {
+				return
+			}
+			s := min(max(v.scale*k, fit), viewerMaxScale)
+			k = s / v.scale
+			fx, fy := px-stageW/2, py-stageH/2
+			v.x, v.y = fx-(fx-v.x)*k, fy-(fy-v.y)*k
+			v.scale = s
+			clamp()
+		}
+
+		stage := ui.Box(c.Key("viewer-stage")).Size(stageW, stageH).Clip().Cursor(ui.CursorGrab).
+			Focusable().FocusRing(false).Focus()
+		if v.pressed && v.moved {
+			stage.Cursor(ui.CursorGrabbing)
+		}
+		stage.HandleInput(func(ev ui.InputEvent) bool {
+			switch ev.Kind {
+			case ui.InputKeyDown:
+				if ev.Mods == 0 && (ev.Key == ui.KeySpace || ev.Key == ui.KeyEscape) {
+					p.viewing = false
+					return true
+				}
+				return false
+			case ui.InputZoom:
+				zoom(ev.Scale, ev.X, ev.Y)
+				return true
+			case ui.InputScroll:
+				switch {
+				case ev.Precise && ev.Mods&ui.Cmd == 0:
+					// A touchpad's two fingers move it, as in Preview.
+					v.x -= ev.DX
+					v.y -= ev.DY
+					clamp()
+				case ev.DY == 0:
+				case ev.Precise:
+					zoom(float32(math.Exp(float64(-ev.DY)/300)), ev.X, ev.Y)
+				case ev.DY < 0:
+					zoom(viewerStep, ev.X, ev.Y)
+				default:
+					zoom(1/viewerStep, ev.X, ev.Y)
+				}
+				return true
+			case ui.InputPointerDown:
+				if ev.Button != 0 {
+					return false
+				}
+				if ev.Clicks == 2 {
+					v.scale, v.pressed = 0, false // fitted in again in the next frame
+					return true
+				}
+				v.pressed, v.moved = true, false
+				v.downX, v.downY, v.lastX, v.lastY = ev.X, ev.Y, ev.X, ev.Y
+				return true
+			case ui.InputPointerMove:
+				if !v.pressed {
+					return false
+				}
+				dx, dy := ev.X-v.lastX, ev.Y-v.lastY
+				v.lastX, v.lastY = ev.X, ev.Y
+				if !v.moved && absf(ev.X-v.downX)+absf(ev.Y-v.downY) > 4 {
+					v.moved = true
+					dx, dy = ev.X-v.downX, ev.Y-v.downY
+				}
+				if v.moved && ready {
+					v.x += dx
+					v.y += dy
+					clamp()
+				}
+				return true
+			case ui.InputPointerUp:
+				if !v.pressed {
+					return true
+				}
+				v.pressed = false
+				if !v.moved && !ev.Canceled {
+					// A click beside the picture closes it.
+					sw, sh := iw*v.scale, ih*v.scale
+					left, top := stageW/2+v.x-sw/2, stageH/2+v.y-sh/2
+					if !ready || ev.X < left || ev.Y < top || ev.X > left+sw || ev.Y > top+sh {
+						p.viewing = false
+					}
+				}
+				return true
+			}
+			return false
+		})
+		stage.Children(func() {
+			if !ready {
+				return
+			}
+			sw, sh := iw*v.scale, ih*v.scale
+			image := ui.Image(c.Key("viewer-image"), original.bitmap).Absolute().
+				Left(stageW/2+v.x-sw/2).Top(stageH/2+v.y-sh/2).Size(sw, sh)
 			original.releasePixels(c, image)
-		}
-		if p.actual {
-			ui.ScrollBoth(c.Key("viewer-scroll")).Size(min(iw, roomW), min(ih, roomH)).Radius(8).Children(func() {
-				show(iw, ih, ui.CursorZoomOut)
-			})
-		} else {
-			scale := min(roomW/iw, roomH/ih, 1)
-			show(iw*scale, ih*scale, ui.CursorZoomIn)
-		}
-		hint := tx.ImageCloseHint()
-		if !fits {
-			hint = tx.ImageActualHint() + " · " + hint
+		})
+
+		hint := tx.ImageViewerHint()
+		if ready {
+			hint = fmt.Sprintf("%d%% · %s", int(v.scale*100+0.5), hint)
 		}
 		ui.Text(c, hint).FontSize(11.5).TextColor(ui.RGBA(255, 255, 255, 0.78)).SingleLine()
 	})
-	if !p.viewing {
-		p.actual = false
+	if !p.viewing && v.shown {
+		p.view = viewer{}
+		a.input.Focus()
 	}
+	v.shown = p.viewing
+}
+
+func absf(x float32) float32 {
+	if x < 0 {
+		return -x
+	}
+	return x
 }
 
 // hexRGB writes a color of the form #rgb, #rrggbb or #rrggbbaa as rgb()
