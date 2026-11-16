@@ -157,17 +157,23 @@ func hashOf(kind Kind, data []byte) string {
 // writeClipboard puts a whole clip (see Store.Get) on the clipboard. Plain
 // leaves out the formatting of text.
 func writeClipboard(c *Clip, plain bool) error {
+	var err error
 	switch c.Kind {
 	case KindImage:
-		return mygo.Clipboard.WriteImage(c.Data)
+		err = mygo.Clipboard.WriteImage(c.Data)
 	case KindFiles:
-		return mygo.Clipboard.WriteFiles(c.Files()...)
+		err = mygo.Clipboard.WriteFiles(c.Files()...)
+	default:
+		reps := []transfer.Representation{transfer.Bytes(transfer.Text, []byte(c.Text))}
+		if c.HTML != "" && !plain {
+			reps = append(reps, transfer.Bytes(transfer.HTML, []byte(c.HTML)))
+		}
+		err = mygo.Clipboard.Write(transfer.New(transfer.NewItem(reps...)))
 	}
-	reps := []transfer.Representation{transfer.Bytes(transfer.Text, []byte(c.Text))}
-	if c.HTML != "" && !plain {
-		reps = append(reps, transfer.Bytes(transfer.HTML, []byte(c.HTML)))
+	if err == nil {
+		flushClipboard()
 	}
-	return mygo.Clipboard.Write(transfer.New(transfer.NewItem(reps...)))
+	return err
 }
 
 // detail is the line a card's footer shows.

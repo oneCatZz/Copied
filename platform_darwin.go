@@ -29,6 +29,9 @@ func clipboardSeq() (seq int64, ok bool) {
 // hides.
 func frontWindow() uintptr { return 0 }
 
+// flushClipboard is for Windows' OLE clipboard; it does nothing here.
+func flushClipboard() {}
+
 const (
 	keyCodeV            = 9
 	eventFlagMaskCmd    = 1 << 20

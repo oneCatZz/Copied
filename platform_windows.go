@@ -15,7 +15,17 @@ var (
 	procIsWindow                   = user32.NewProc("IsWindow")
 	procSendInput                  = user32.NewProc("SendInput")
 	procGetAsyncKeyState           = user32.NewProc("GetAsyncKeyState")
+	procOleFlushClipboard          = syscall.NewLazyDLL("ole32.dll").NewProc("OleFlushClipboard")
 )
+
+// flushClipboard renders what the app put on the clipboard into it at
+// once. Left to be rendered on demand, a picture reached some readers
+// empty, such as Windows Forms, by which Claude Code reads it.
+func flushClipboard() {
+	if hr, _, _ := procOleFlushClipboard.Call(); int32(hr) < 0 {
+		log.Printf("flushing the clipboard: %#x", uint32(hr))
+	}
+}
 
 // clipboardSeq returns a number that changes with the clipboard's content.
 func clipboardSeq() (seq int64, ok bool) {
