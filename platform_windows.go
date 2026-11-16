@@ -5,6 +5,8 @@ import (
 	"syscall"
 	"time"
 	"unsafe"
+
+	"github.com/egoist/mygo"
 )
 
 var (
@@ -15,15 +17,15 @@ var (
 	procIsWindow                   = user32.NewProc("IsWindow")
 	procSendInput                  = user32.NewProc("SendInput")
 	procGetAsyncKeyState           = user32.NewProc("GetAsyncKeyState")
-	procOleFlushClipboard          = syscall.NewLazyDLL("ole32.dll").NewProc("OleFlushClipboard")
 )
 
 // flushClipboard renders what the app put on the clipboard into it at
 // once. Left to be rendered on demand, a picture reached some readers
-// empty, such as Windows Forms, by which Claude Code reads it.
+// empty, such as Windows Forms, by which Claude Code reads it. MyGo waits
+// while Windows' clipboard history reads the change, as it does at once.
 func flushClipboard() {
-	if hr, _, _ := procOleFlushClipboard.Call(); int32(hr) < 0 {
-		log.Printf("flushing the clipboard: %#x", uint32(hr))
+	if err := mygo.Clipboard.Flush(); err != nil {
+		log.Print("flushing the clipboard: ", err)
 	}
 }
 
