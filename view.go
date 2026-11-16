@@ -3,10 +3,10 @@ package main
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"runtime"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"copied/locales"
 
@@ -14,13 +14,33 @@ import (
 )
 
 const (
-	cardWidth = 240 // DIPs
-	cardGap   = 14
+	listWidth = 340 // DIPs
+	rowHeight = 52
+	rowGap    = 2
 )
 
-// A placeholder must not inherit the full card's transition snapshot, which
-// can retain the image even after its application cache entry is evicted.
+// paneSurface is the look of the list and the preview: a raised sheet over
+// the panel, as the cards had.
+func paneSurface(c *ui.Context, pane ui.Element) ui.Element {
+	t := c.Theme()
+	depth := float32(0.04) // of the shadow, deeper on dark
+	if t.Dark {
+		depth = 0.12
+	}
+	return pane.Radius(14).Background(t.Surface).Border(1, t.Border).
+		Shadow(0, 1, 2, 0, ui.RGB(0, 0, 0).Alpha(depth)).Shadow(0, 8, 24, -12, ui.RGB(0, 0, 0).Alpha(depth*2))
+}
+
+// A placeholder must not inherit the full row's transition snapshot.
 type cardPlaceholder int64
+
+// Rows slide to their places as clips come, go and move to the front, new
+// ones fading in.
+var rowMotion = ui.ElementTransition{
+	Animation: &ui.Snappy,
+	Enter:     &ui.Motion{Y: 8, Opacity: 0},
+	Exit:      &ui.Motion{Scale: 0.96, Opacity: 0},
+}
 
 var digitKeys = []ui.Key{ui.Key1, ui.Key2, ui.Key3, ui.Key4, ui.Key5, ui.Key6, ui.Key7, ui.Key8, ui.Key9}
 
@@ -50,15 +70,15 @@ func (a *app) key(mods ui.Modifiers, key ui.Key) bool {
 		}
 		a.query, a.chosen, a.scrollTo = "", 0, true
 		a.reload()
-	case mods == 0 && key == ui.KeyLeft:
+	case mods == 0 && key == ui.KeyUp:
 		a.picked = nil
 		a.choose(a.chosen - 1)
-	case mods == 0 && key == ui.KeyRight:
+	case mods == 0 && key == ui.KeyDown:
 		a.picked = nil
 		a.choose(a.chosen + 1)
-	case mods == ui.Shift && key == ui.KeyLeft:
+	case mods == ui.Shift && key == ui.KeyUp:
 		a.extendPick(-1)
-	case mods == ui.Shift && key == ui.KeyRight:
+	case mods == ui.Shift && key == ui.KeyDown:
 		a.extendPick(1)
 	case mods == 0 && key == ui.KeyEnter:
 		a.paste(a.chosen, false)
@@ -124,7 +144,7 @@ func (a *app) view(c *ui.Context) {
 		}
 		combos := []combo{
 			{0, ui.KeyTab}, {ui.Shift, ui.KeyTab},
-			{0, ui.KeyLeft}, {0, ui.KeyRight}, {ui.Shift, ui.KeyLeft}, {ui.Shift, ui.KeyRight},
+			{0, ui.KeyUp}, {0, ui.KeyDown}, {ui.Shift, ui.KeyUp}, {ui.Shift, ui.KeyDown},
 			{0, ui.KeyEnter}, {ui.Shift, ui.KeyEnter},
 			{ui.Cmd, ui.KeyEnter}, {ui.Cmd, ui.KeyBackspace}, {ui.Cmd, ui.KeyP}, {ui.Cmd, ui.KeyS}, {ui.Cmd, ui.KeyComma},
 		}
@@ -150,7 +170,7 @@ func (a *app) view(c *ui.Context) {
 	}
 	body.Children(func() {
 		a.header(c)
-		a.strip(c)
+		a.content(c)
 		a.footer(c)
 		a.settingsDialog(c)
 		a.groupDialog(c)
@@ -245,8 +265,8 @@ func (a *app) header(c *ui.Context) {
 	})
 }
 
-// strip is the row of cards, which scrolls sideways.
-func (a *app) strip(c *ui.Context) {
+// content is the list of clips beside the preview of the chosen one.
+func (a *app) content(c *ui.Context) {
 	t := c.Theme()
 	tx := locales.In(c.Locale())
 	if len(a.clips) == 0 {
@@ -260,51 +280,15 @@ func (a *app) strip(c *ui.Context) {
 		})
 		return
 	}
-	// What a card asks for changes the clips, so it waits for them all to
-	// be built.
+	// What a row or the preview asks for changes the clips, so it waits for
+	// them all to be built.
 	var action func()
-	width, _ := c.Size()
-	const stride = cardWidth + cardGap
-	const overscan = 2 * stride
-	left, right := a.stripScroll.X-overscan, a.stripScroll.X+width+overscan
-	chosenX := float32(a.chosen * stride)
-	buildCard := func(i int) bool {
-		x := float32(i * stride)
-		near := x+cardWidth >= left && x <= right
-		reveal := a.scrollTo && x+cardWidth >= chosenX-width-overscan && x <= chosenX+width+overscan
-		return i == a.chosen || near || reveal
-	}
-	// Protect the entire current window before loading anything, so an LRU
-	// insertion cannot evict another card that this frame is about to show.
-	for _, th := range a.thumbs {
-		th.pinned = false
-	}
-	required := 0
-	for i, clip := range a.clips {
-		if clip.Kind == KindImage && buildCard(i) {
-			required++
-			if th := a.thumbs[clip.ID]; th != nil {
-				th.pinned = true
-			}
+	ui.Row(c).Grow(1).Basis(0).MinHeight(0).Padding(12, 22, 14, 22).Gap(14).AlignItems(ui.Stretch).Children(func() {
+		if act := a.list(c); act != nil {
+			action = act
 		}
-	}
-	a.thumbLimit = max(thumbCacheLimit, required)
-	a.trimThumbs()
-	ui.ScrollHorizontal(c.Key("strip")).TrackScroll(&a.stripScroll).HandleInput(a.scrollStrip).
-		Grow(1).Padding(18, 22, 20, 22).Gap(cardGap).AlignItems(ui.Stretch).Children(func() {
-		for i, clip := range a.clips {
-			if !buildCard(i) {
-				if a.cardMenuID == clip.ID {
-					a.cardMenuID = 0
-				}
-				// Keep geometry and identity, without text layout, shadows
-				// or image work for distant cards.
-				ui.Box(c.Key(cardPlaceholder(clip.ID))).Width(cardWidth).Shrink(0)
-				continue
-			}
-			if act := a.card(c, i, clip); act != nil {
-				action = act
-			}
+		if act := a.detail(c); act != nil {
+			action = act
 		}
 	})
 	if action != nil {
@@ -312,183 +296,141 @@ func (a *app) strip(c *ui.Context) {
 	}
 }
 
-// scrollStrip turns a vertical wheel sideways. Precise gestures and native
-// horizontal input keep the platform's direction, momentum and axis handling.
-func (a *app) scrollStrip(ev ui.InputEvent) bool {
-	if ev.Kind != ui.InputScroll || ev.Precise || ev.DX != 0 || ev.DY == 0 || ev.Mods&ui.Shift != 0 {
-		return false
+// list is the column of clips, which scrolls up and down.
+func (a *app) list(c *ui.Context) (action func()) {
+	_, height := c.Size()
+	const stride = rowHeight + rowGap
+	const overscan = 4 * stride
+	top, bottom := a.listScroll.Y-overscan, a.listScroll.Y+height+overscan
+	chosenY := float32(a.chosen * stride)
+	buildRow := func(i int) bool {
+		y := float32(i * stride)
+		near := y+rowHeight >= top && y <= bottom
+		reveal := a.scrollTo && y+rowHeight >= chosenY-height-overscan && y <= chosenY+height+overscan
+		return i == a.chosen || near || reveal
 	}
-	s := &a.stripScroll
-	from := s.X
-	if s.Scrolling() && (ev.DY > 0) == (a.stripWheelTarget > s.X) {
-		from = a.stripWheelTarget
-	}
-	target := max(0, min(from+ev.DY, s.MaxX))
-	if target == s.X && !s.Scrolling() {
-		return false
-	}
-	// Accumulate repeated notches, but reverse from the current position so
-	// unfinished travel does not swallow a change of direction at an edge.
-	a.stripWheelTarget = target
-	s.ScrollTo(target, 0, ui.Animation{Duration: 150 * time.Millisecond, Ease: ui.EaseOut})
-	return true
-}
-
-// card shows a clip, and returns what the user asked of it, if anything.
-func (a *app) card(c *ui.Context, i int, clip *Clip) (action func()) {
-	t, tx := c.Theme(), locales.In(c.Locale())
-	selected := i == a.chosen
-	hue := kindColor(clip.Kind, t.Dark)
-	shade := ui.RGB(0, 0, 0)
-	depth := float32(0.16) // of the shadows, deeper on dark
-	if t.Dark {
-		depth = 0.5
-	}
-
-	// Previews clip their own contents inside the card's padding. Clipping
-	// this animated rounded ancestor too creates redundant retained masks.
-	card := ui.Column(c.Key(clip.ID)).Width(cardWidth).Shrink(0).Radius(16).
-		Background(t.Surface).Cursor(ui.CursorPointer).Label(kindLabel(clip.Kind, c.Locale()))
-	lift := float32(0)
-	switch {
-	case selected:
-		lift = 8
-		card.Border(1, t.Accent).Shadow(0, 0, 0, 2, t.Accent.Alpha(0.9)).
-			Shadow(0, 18, 36, -10, t.Accent.Alpha(0.45)).Shadow(0, 10, 24, -8, shade.Alpha(depth))
-	case a.pickOrder(clip.ID) > 0:
-		lift = 3
-		card.Border(1, t.Accent).Shadow(0, 0, 0, 1, t.Accent.Alpha(0.5)).Shadow(0, 10, 24, -8, shade.Alpha(depth))
-	case card.Hovered():
-		lift = 3
-		card.Border(1, t.TextMuted.Alpha(0.45)).Shadow(0, 10, 24, -8, shade.Alpha(depth))
-	default:
-		card.Border(1, t.Border).Shadow(0, 1, 2, 0, shade.Alpha(depth/4))
-	}
-	// The card rises to its lift, and from below as the panel shows.
-	card.AnimatePose(ui.Pose{Y: -lift}, ui.Snappy)
-	y := float32(0)
-	if i < cardsRising {
-		e := rise(a.since-riseTime/3-time.Duration(i)*cardStagger, cardRise)
-		if e < 1 {
-			y += (1 - e) * 36
-			card.Opacity(e)
-		}
-	}
-	card.Translate(0, y).Transition(cardMotion)
-
-	if selected && a.scrollTo {
-		card.ScrollIntoView()
-	}
-	if card.DoubleClicked() {
-		action = func() { a.paste(i, false) }
-	} else if card.Clicked() {
-		a.clickCard(i, card.ClickModifiers())
-		a.input.Focus()
-	}
-	if menuAction := a.cardMenu(c, card, i, clip); menuAction != nil {
-		action = menuAction
-	}
-
-	card.Children(func() {
-		ui.Row(c).Padding(12, 14, 10, 12).Gap(8).AlignItems(ui.Center).Children(func() {
-			if a.pickOrder(clip.ID) > 0 {
-				ui.Box(c).Size(24, 24).Center().Radius(8).Background(t.Accent).Description(tx.PickedCount(len(a.picked))).Children(func() {
-					ui.Icon(c, filterCheckIcon).FontSize(13).TextColor(ui.RGB(255, 255, 255))
-				})
-			} else {
-				ui.Box(c).Size(24, 24).Center().Radius(8).Background(hue.Alpha(0.16)).Children(func() {
-					ui.Icon(c, kindIcon(clip.Kind)).FontSize(13).TextColor(hue)
-				})
-			}
-			ui.Text(c, kindLabel(clip.Kind, c.Locale())).FontSize(12).FontWeight(600)
-			ui.Spacer(c)
-			if len(clip.GroupIDs) > 0 || clip.Pinned {
-				ui.Icon(c, iconFolder).FontSize(12).TextColor(kindColor(KindFiles, t.Dark)).Description(tx.Groups())
-			}
-			if n := a.stackOrder(clip.ID); n > 0 {
-				ui.Row(c).Height(18).MinWidth(18).PaddingX(5).Justify(ui.Center).AlignItems(ui.Center).Radius(9).
-					Background(t.Accent).Description(tx.StackCount(n)).Children(func() {
-					ui.Text(c, fmt.Sprint(n)).FontSize(10.5).FontWeight(650).TextColor(ui.RGB(255, 255, 255))
-				})
-			}
-			ui.Text(c, ago(clip.UsedAt, c.Locale())).FontSize(11).TextColor(t.TextMuted)
-		})
-
-		a.preview(c, i, clip, hue)
-
-		ui.Row(c).Padding(10, 14, 12, 14).Gap(8).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, clip.detail(c.Locale())).FontSize(11).TextColor(t.TextMuted).SingleLine().Grow(1)
-			if i < len(digitKeys) {
-				keycap(c, cmdCap()+" "+fmt.Sprint(i+1))
+	pane := ui.Column(c.Key("list-pane")).Width(listWidth).Shrink(0).Padding(6)
+	paneSurface(c, pane).Children(func() {
+		ui.Scroll(c.Key("list")).TrackScroll(&a.listScroll).Grow(1).Basis(0).Gap(rowGap).Children(func() {
+			for i, clip := range a.clips {
+				if !buildRow(i) {
+					if a.cardMenuID == clip.ID {
+						a.cardMenuID = 0
+					}
+					// Keep geometry and identity, without text layout for
+					// distant rows.
+					ui.Box(c.Key(cardPlaceholder(clip.ID))).Height(rowHeight).Shrink(0)
+					continue
+				}
+				if act := a.row(c, i, clip); act != nil {
+					action = act
+				}
 			}
 		})
 	})
 	return action
 }
 
-// preview is the middle of a card: the start of a text, a link, a
-// picture, a color, or the names of files.
-func (a *app) preview(c *ui.Context, i int, clip *Clip, hue ui.Color) {
-	t := c.Theme()
-	switch clip.Kind {
-	case KindCode:
-		ui.Column(c).Grow(1).Basis(0).Margin(0, 12).Padding(10).Radius(10).
-			Background(t.SurfaceHover).Children(func() {
-			// Padding keeps the text inside the rounded surface; a simple
-			// rectangular clip avoids a moving rounded coverage mask.
-			ui.Box(c).Fill().Clip().Children(func() {
-				ui.RichText(c, clip.codePreview().styledSpans(t)...).
-					Font("monospace").FontSize(11.5).LineHeight(1.55).NoWrap().MaxLines(8)
-			})
-		})
-	case KindImage:
-		// Pictures are read as their cards come near the view.
-		box := ui.Box(c).Grow(1).Basis(0).Margin(0, 12).Radius(10).Background(t.SurfaceHover)
-		box.Children(func() {
-			th := a.thumb(clip)
-			if th.bitmap != nil {
-				// Image radii are evaluated directly by the GPU image shader.
-				image := ui.Image(c, th.bitmap).Fill().Fit(ui.Cover).Radius(10)
-				th.releasePixels(c, image)
-			}
-		})
-	case KindColor:
-		value := strings.TrimSpace(clip.Text)
-		ui.Column(c).Grow(1).Basis(0).Padding(0, 12).Gap(8).Children(func() {
-			ui.Box(c).Grow(1).Radius(10).Background(ui.Hex(value)).
-				InsetShadow(0, 0, 0, 1, t.Text.Alpha(0.12))
-			ui.Text(c, strings.ToUpper(value)).FontSize(12.5).FontWeight(600).LetterSpacing(0.4).TextAlign(ui.Center)
-		})
-	case KindLink:
-		link := strings.TrimSpace(clip.Text)
-		host := link
-		if u, err := url.Parse(link); err == nil && u.Host != "" {
-			host = u.Host
-		}
-		ui.Column(c).Grow(1).Basis(0).Padding(2, 14).Gap(5).Clip().Children(func() {
-			ui.Text(c, host).FontSize(14).FontWeight(600).TextColor(hue).SingleLine()
-			ui.Text(c, link).FontSize(11.5).LineHeight(1.5).MaxLines(5).TextColor(t.TextMuted)
-		})
-	case KindFiles:
-		const shown = 5
-		names := baseNames(clip.Files())
-		ui.Column(c).Grow(1).Basis(0).Padding(2, 14).Gap(7).Clip().Children(func() {
-			for _, name := range names[:min(len(names), shown)] {
-				ui.Row(c).Gap(7).AlignItems(ui.Center).Children(func() {
-					ui.Icon(c, iconFile).FontSize(13).TextColor(hue)
-					ui.Text(c, name).FontSize(12.5).SingleLine().Grow(1)
-				})
-			}
-			if more := len(names) - shown; more > 0 {
-				ui.Text(c, locales.In(c.Locale()).MoreFiles(more)).FontSize(11).TextColor(t.TextMuted)
-			}
-		})
-	default:
-		text := strings.ReplaceAll(strings.TrimSpace(clip.Text), "\t", "  ")
-		ui.Column(c).Grow(1).Basis(0).Padding(2, 14).Clip().Children(func() {
-			ui.Text(c, text).FontSize(12.5).LineHeight(1.55).MaxLines(7).TextColor(t.Text.Alpha(0.86))
-		})
+// row shows a clip in the list, and returns what the user asked of it, if
+// anything.
+func (a *app) row(c *ui.Context, i int, clip *Clip) (action func()) {
+	t, tx := c.Theme(), locales.In(c.Locale())
+	selected := i == a.chosen
+	picked := a.pickOrder(clip.ID) > 0
+	hue := kindColor(clip.Kind, t.Dark)
+
+	row := ui.Row(c.Key(clip.ID)).Height(rowHeight).Shrink(0).PaddingX(10).Gap(10).AlignItems(ui.Center).
+		Radius(9).Cursor(ui.CursorPointer).Label(kindLabel(clip.Kind, c.Locale()))
+	switch {
+	case selected:
+		row.Background(t.Accent.Alpha(0.11))
+	case picked:
+		row.Background(t.Accent.Alpha(0.06))
+	case row.Hovered():
+		row.Background(t.SurfaceHover)
 	}
+	// The rows rise one after the other as the panel shows.
+	if i < cardsRising {
+		e := rise(a.since-riseTime/3-time.Duration(i)*cardStagger, cardRise)
+		if e < 1 {
+			row.Translate(0, (1-e)*16).Opacity(e)
+		}
+	}
+	row.Transition(rowMotion)
+
+	if selected && a.scrollTo {
+		row.ScrollIntoView()
+	}
+	if row.DoubleClicked() {
+		action = func() { a.paste(i, false) }
+	} else if row.Clicked() {
+		a.clickCard(i, row.ClickModifiers())
+		a.input.Focus()
+	}
+	if menuAction := a.cardMenu(c, row, i, clip); menuAction != nil {
+		action = menuAction
+	}
+
+	row.Children(func() {
+		switch {
+		case picked:
+			ui.Box(c).Size(28, 28).Shrink(0).Center().Radius(8).Background(t.Accent).Description(tx.PickedCount(len(a.picked))).Children(func() {
+				ui.Icon(c, filterCheckIcon).FontSize(13).TextColor(ui.RGB(255, 255, 255))
+			})
+		case clip.Kind == KindColor:
+			ui.Box(c).Size(28, 28).Shrink(0).Radius(8).Background(ui.Hex(strings.TrimSpace(clip.Text))).
+				InsetShadow(0, 0, 0, 1, t.Text.Alpha(0.12))
+		default:
+			ui.Box(c).Size(28, 28).Shrink(0).Center().Radius(8).Background(hue.Alpha(0.13)).Children(func() {
+				ui.Icon(c, kindIcon(clip.Kind)).FontSize(13).TextColor(hue)
+			})
+		}
+		ui.Column(c).Grow(1).Basis(0).MinWidth(0).Gap(3).Children(func() {
+			ui.Text(c, rowTitle(clip, c.Locale())).FontSize(12.5).FontWeight(500).SingleLine()
+			ui.Text(c, ago(clip.UsedAt, c.Locale())+" · "+clip.detail(c.Locale())).FontSize(11).TextColor(t.TextMuted).SingleLine()
+		})
+		if len(clip.GroupIDs) > 0 || clip.Pinned {
+			ui.Icon(c, iconFolder).FontSize(12).Shrink(0).TextColor(kindColor(KindFiles, t.Dark)).Description(tx.Groups())
+		}
+		if n := a.stackOrder(clip.ID); n > 0 {
+			ui.Row(c).Height(18).MinWidth(18).Shrink(0).PaddingX(5).Justify(ui.Center).AlignItems(ui.Center).Radius(9).
+				Background(t.Accent).Description(tx.StackCount(n)).Children(func() {
+				ui.Text(c, fmt.Sprint(n)).FontSize(10.5).FontWeight(650).TextColor(ui.RGB(255, 255, 255))
+			})
+		}
+		// The shortcut keeps a fixed slot, so the badges before it line up
+		// whichever row is chosen; the chosen row's is only darker.
+		ui.Row(c).Width(40).Shrink(0).Justify(ui.End).Children(func() {
+			if i < len(digitKeys) {
+				ink := t.TextMuted.Alpha(0.75)
+				if selected {
+					ink = t.Text.Alpha(0.8)
+				}
+				ui.Text(c, cmdCap()+" "+fmt.Sprint(i+1)).FontSize(10.5).TextColor(ink).SingleLine()
+			}
+		})
+	})
+	return action
+}
+
+// rowTitle is the line a row shows of its clip: the start of its text, on
+// one line, the names of its files, or what kind of picture it is.
+func rowTitle(clip *Clip, locale string) string {
+	switch clip.Kind {
+	case KindImage:
+		return kindLabel(clip.Kind, locale)
+	case KindFiles:
+		return strings.Join(baseNames(clip.Files()), ", ")
+	}
+	s := clip.Text
+	if len(s) > 400 {
+		end := 400
+		for end > 0 && !utf8.RuneStart(s[end]) {
+			end--
+		}
+		s = s[:end]
+	}
+	return strings.Join(strings.Fields(s), " ")
 }
 
 const thumbCacheLimit = 24
@@ -612,7 +554,7 @@ func (a *app) footer(c *ui.Context) {
 		keys  []string
 		label string
 	}{
-		{[]string{"←", "→"}, tx.Select()},
+		{[]string{"↑", "↓"}, tx.Select()},
 		{[]string{"↵"}, tx.Paste()},
 		{[]string{"⇧", "↵"}, tx.PastePlainHint()},
 		{[]string{cmd, "↵"}, tx.CopyOnly()},
@@ -637,6 +579,10 @@ func (a *app) footer(c *ui.Context) {
 				break
 			}
 			if width < 900 && (i == 2 || i == 3 || i == 5) {
+				continue
+			}
+			// The stack's keys take the room of the less used hints.
+			if width < 1100 && len(a.stack) > 0 && (i == 2 || i == 3) {
 				continue
 			}
 			hint(h.keys, h.label)

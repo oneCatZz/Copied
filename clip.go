@@ -159,7 +159,7 @@ func hashOf(kind Kind, data []byte) string {
 func writeClipboard(c *Clip, plain bool) error {
 	switch c.Kind {
 	case KindImage:
-		return mygo.Clipboard.WriteImage(c.Data)
+		return writeImage(c.Data)
 	case KindFiles:
 		return mygo.Clipboard.WriteFiles(c.Files()...)
 	}
