@@ -1,6 +1,6 @@
 // Copied is a clipboard manager for Windows and macOS: it records what is
 // copied, text, links, pictures and files, and a global shortcut shows the
-// history in a panel along the bottom of the screen, over every app, to
+// history in a panel centered on the screen, over every app, to
 // search it and paste a clip into the app the user is in. It lives in the
 // menu bar (the notification area on Windows).
 package main
@@ -25,7 +25,8 @@ import (
 var defaultShortcuts = []string{"CmdOrCtrl+Shift+V", "Alt+Shift+V", "CmdOrCtrl+Alt+Shift+V"}
 
 const (
-	panelHeight    = 372 // DIPs
+	panelWidth     = 960 // DIPs, at most
+	panelHeight    = 580 // DIPs, at most
 	panelMargin    = 12  // around the panel, in the work area
 	pollEvery      = 400 * time.Millisecond
 	ownWrite       = time.Second // the watcher ignores the clipboard so long after the app wrote it
@@ -98,8 +99,9 @@ type app struct {
 
 	stackPastes chan stackPaste // pastes of the stack, in turn (queueStackPaste)
 
-	stripScroll      ui.ScrollState
-	stripWheelTarget float32 // pending travel from consecutive wheel notches
+	listScroll ui.ScrollState
+	preview    clipPreview // the whole text of the chosen clip, as it loads
+	codeWrap   bool        // the preview of code wraps its lines
 
 	target   uintptr      // the window the panel was shown over (Windows)
 	paused   atomic.Bool  // the watcher records nothing
@@ -277,8 +279,8 @@ func (a *app) watch() {
 	}
 }
 
-// show shows the panel along the bottom of the display with the pointer,
-// with the whole history and the newest clip chosen.
+// show shows the panel centered on the display with the pointer, with the
+// whole history and the newest clip chosen.
 func (a *app) show() {
 	a.cardMenuID = 0
 	a.searchSession++
@@ -293,15 +295,16 @@ func (a *app) show() {
 	}
 	a.target = target
 	d := mygo.Screen.DisplayNearestPoint(mygo.Screen.CursorScreenPoint())
-	width := d.WorkArea.Width - 2*panelMargin
-	a.panel.SetSize(width, panelHeight)
-	a.panel.SetPosition(d.WorkArea.X+panelMargin, d.WorkArea.Y+d.WorkArea.Height-panelHeight-panelMargin)
+	width := min(panelWidth, d.WorkArea.Width-2*panelMargin)
+	height := min(panelHeight, d.WorkArea.Height-2*panelMargin)
+	a.panel.SetSize(width, height)
+	a.panel.SetPosition(d.WorkArea.X+(d.WorkArea.Width-width)/2, d.WorkArea.Y+(d.WorkArea.Height-height)/2)
 	a.query, a.filter, a.chosen, a.scrollTo = "", FilterAll, 0, true
 	a.picked = nil
-	// Reveal alone can leave the first card flush against the viewport edge.
-	// Reset its offset and pending wheel animation so the padding returns too.
-	a.stripScroll = ui.ScrollState{Handle: a.stripScroll.Handle}
-	a.stripWheelTarget = 0
+	// Reveal alone can leave the first row flush against the viewport edge.
+	// Reset its offset so the padding returns too.
+	a.listScroll = ui.ScrollState{Handle: a.listScroll.Handle}
+	a.preview.reset()
 	a.groupID = 0
 	a.dismissGroupUI()
 	a.filterFlow = filterFlow{}
@@ -359,7 +362,7 @@ func (a *app) newPanel() {
 		Transparent:   true,
 		Vibrancy:      mygo.VibrancyGlass,
 		CornerRadius:  18,
-		Width:         1200,
+		Width:         panelWidth,
 		Height:        panelHeight,
 		DisableResize: true,
 		Content:       ui.View(a.view),
@@ -400,6 +403,7 @@ func (a *app) panelHidden(panel *mygo.Window) {
 	a.searchSession++
 	a.recordError = ""
 	a.clips, a.picked = nil, nil
+	a.preview.reset()
 	a.clearThumbs()
 	a.cancelPanelRelease()
 	epoch := a.panelEpoch

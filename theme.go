@@ -111,13 +111,6 @@ func kindIcon(k Kind) *ui.SVG {
 
 // Transitions of the panel's elements.
 var (
-	// Cards slide to their places as clips come, go and move to the
-	// front, new ones growing in.
-	cardMotion = ui.ElementTransition{
-		Animation: &ui.Snappy,
-		Enter:     &ui.Motion{Scale: 0.9, Y: 14},
-		Exit:      &ui.Motion{Scale: 0.9},
-	}
 	// Hovers and selections fade.
 	fadeMotion = ui.ElementTransition{Colors: true, Shadows: true, Duration: 140 * time.Millisecond}
 )

@@ -108,6 +108,12 @@ func (c *Clip) codePreview() *codePreview {
 		return c.code
 	}
 	language, body, _ := detectCode(c.Text)
+	c.code = highlightCode(language, body, 8)
+	return c.code
+}
+
+// highlightCode tokenizes at most maxLines lines of body as language.
+func highlightCode(language, body string, maxLines int) *codePreview {
 	preview := &codePreview{language: language}
 	lang := editor.LanguageNamed(language)
 	if lang == nil || lang.Tokenizer == nil {
@@ -118,8 +124,8 @@ func (c *Clip) codePreview() *codePreview {
 	body = strings.ReplaceAll(strings.ReplaceAll(body, "\r\n", "\n"), "\t", "    ")
 	var state uint64
 	var tokens []editor.Token
-	for i, line := range strings.SplitN(body, "\n", 9) {
-		if i == 8 {
+	for i, line := range strings.SplitN(body, "\n", maxLines+1) {
+		if i == maxLines {
 			break
 		}
 		if i > 0 {
@@ -138,7 +144,6 @@ func (c *Clip) codePreview() *codePreview {
 			preview.kinds = append(preview.kinds, editor.TokenText)
 		}
 	}
-	c.code = preview
 	return preview
 }
 

@@ -1003,3 +1003,33 @@ func StackShortcutReserved() string { return In(i18n.Locale()).StackShortcutRese
 func (msgs Messages) StackShortcutReserved() string {
 	return Catalog.Format(msgs.locale, "stackShortcutReserved", nil)
 }
+
+// LineCount says "{count, plural, one {# line} other {# lines}}"
+// in the language the app shows.
+func LineCount(count int) string { return In(i18n.Locale()).LineCount(count) }
+
+// LineCount says "{count, plural, one {# line} other {# lines}}"
+// in the language of msgs.
+func (msgs Messages) LineCount(count int) string {
+	return Catalog.Format(msgs.locale, "lineCount", map[string]any{"count": count})
+}
+
+// WrapLines says "Wrap lines"
+// in the language the app shows.
+func WrapLines() string { return In(i18n.Locale()).WrapLines() }
+
+// WrapLines says "Wrap lines"
+// in the language of msgs.
+func (msgs Messages) WrapLines() string {
+	return Catalog.Format(msgs.locale, "wrapLines", nil)
+}
+
+// PreviewTruncated says "Preview shortened. Pasting keeps the full content."
+// in the language the app shows.
+func PreviewTruncated() string { return In(i18n.Locale()).PreviewTruncated() }
+
+// PreviewTruncated says "Preview shortened. Pasting keeps the full content."
+// in the language of msgs.
+func (msgs Messages) PreviewTruncated() string {
+	return Catalog.Format(msgs.locale, "previewTruncated", nil)
+}

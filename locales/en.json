@@ -96,5 +96,8 @@
   "resetPanelShortcut": "Reset panel shortcut",
   "resetStackShortcut": "Reset Stack shortcut",
   "shortcutConflict": "Panel and Stack shortcuts must be different.",
-  "stackShortcutReserved": "Choose another shortcut. Ctrl/Command+V is reserved for pasting."
+  "stackShortcutReserved": "Choose another shortcut. Ctrl/Command+V is reserved for pasting.",
+  "lineCount": "{count, plural, one {# line} other {# lines}}",
+  "wrapLines": "Wrap lines",
+  "previewTruncated": "Preview shortened. Pasting keeps the full content."
 }

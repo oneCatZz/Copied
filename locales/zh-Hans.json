@@ -96,5 +96,8 @@
   "resetPanelShortcut": "恢复面板默认快捷键",
   "resetStackShortcut": "恢复 Stack 默认快捷键",
   "shortcutConflict": "面板和 Stack 不能使用相同的快捷键。",
-  "stackShortcutReserved": "请使用其他组合键，Ctrl/⌘+V 用于普通粘贴。"
+  "stackShortcutReserved": "请使用其他组合键，Ctrl/⌘+V 用于普通粘贴。",
+  "lineCount": "{count} 行",
+  "wrapLines": "自动换行",
+  "previewTruncated": "预览已截断，粘贴时仍为完整内容。"
 }
