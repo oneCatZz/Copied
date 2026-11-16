@@ -386,10 +386,7 @@ func (a *app) row(c *ui.Context, i int, clip *Clip) (action func()) {
 			})
 		}
 		ui.Column(c).Grow(1).Basis(0).MinWidth(0).Gap(3).Children(func() {
-			title := ui.Text(c, rowTitle(clip, c.Locale())).FontSize(12.5).FontWeight(500).SingleLine()
-			if selected {
-				title.FontWeight(600)
-			}
+			ui.Text(c, rowTitle(clip, c.Locale())).FontSize(12.5).FontWeight(500).SingleLine()
 			ui.Text(c, ago(clip.UsedAt, c.Locale())+" · "+clip.detail(c.Locale())).FontSize(11).TextColor(t.TextMuted).SingleLine()
 		})
 		if len(clip.GroupIDs) > 0 || clip.Pinned {
@@ -401,15 +398,17 @@ func (a *app) row(c *ui.Context, i int, clip *Clip) (action func()) {
 				ui.Text(c, fmt.Sprint(n)).FontSize(10.5).FontWeight(650).TextColor(ui.RGB(255, 255, 255))
 			})
 		}
-		// The shortcut stays quiet in every row but the chosen one.
-		if i < len(digitKeys) {
-			key := cmdCap() + " " + fmt.Sprint(i+1)
-			if selected {
-				keycap(c, key)
-			} else {
-				ui.Text(c, key).FontSize(10.5).Shrink(0).TextColor(t.TextMuted.Alpha(0.75)).SingleLine()
+		// The shortcut keeps a fixed slot, so the badges before it line up
+		// whichever row is chosen; the chosen row's is only darker.
+		ui.Row(c).Width(40).Shrink(0).Justify(ui.End).Children(func() {
+			if i < len(digitKeys) {
+				ink := t.TextMuted.Alpha(0.75)
+				if selected {
+					ink = t.Text.Alpha(0.8)
+				}
+				ui.Text(c, cmdCap()+" "+fmt.Sprint(i+1)).FontSize(10.5).TextColor(ink).SingleLine()
 			}
-		}
+		})
 	})
 	return action
 }
