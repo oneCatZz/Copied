@@ -144,11 +144,11 @@ func (msgs Messages) ClipboardTypes() string {
 	return Catalog.Format(msgs.locale, "clipboardTypes", nil)
 }
 
-// SearchHistory says "Search clipboard history"
+// SearchHistory says "Search content or source app"
 // in the language the app shows.
 func SearchHistory() string { return In(i18n.Locale()).SearchHistory() }
 
-// SearchHistory says "Search clipboard history"
+// SearchHistory says "Search content or source app"
 // in the language of msgs.
 func (msgs Messages) SearchHistory() string {
 	return Catalog.Format(msgs.locale, "searchHistory", nil)
@@ -662,6 +662,26 @@ func Groups() string { return In(i18n.Locale()).Groups() }
 // in the language of msgs.
 func (msgs Messages) Groups() string {
 	return Catalog.Format(msgs.locale, "groups", nil)
+}
+
+// SourceApps says "Source apps"
+// in the language the app shows.
+func SourceApps() string { return In(i18n.Locale()).SourceApps() }
+
+// SourceApps says "Source apps"
+// in the language of msgs.
+func (msgs Messages) SourceApps() string {
+	return Catalog.Format(msgs.locale, "sourceApps", nil)
+}
+
+// AppFilter says "App: {name}"
+// in the language the app shows.
+func AppFilter(name string) string { return In(i18n.Locale()).AppFilter(name) }
+
+// AppFilter says "App: {name}"
+// in the language of msgs.
+func (msgs Messages) AppFilter(name string) string {
+	return Catalog.Format(msgs.locale, "appFilter", map[string]any{"name": name})
 }
 
 // TypeFilter says "Type: {name}"

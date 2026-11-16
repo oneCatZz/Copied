@@ -69,7 +69,7 @@ func (a *app) groupNavigation(c *ui.Context, width float32) {
 			a.groupMenu(button, locale)
 		} else {
 			// Chips fit their names, within bounds, so longer names stay readable.
-			const minChip, maxChip, maxVisible = float32(56), float32(160), 6
+			const minChip, maxChip = float32(56), float32(160)
 			chipWidth := func(group Group) float32 {
 				w, _ := c.MeasureText(0, ui.Span{Text: group.label(locale), Size: 12, Weight: 550})
 				return min(maxChip, max(minChip, w+24))
@@ -79,17 +79,17 @@ func (a *app) groupNavigation(c *ui.Context, width float32) {
 			used := widths[0]
 			for _, group := range a.groups {
 				w := chipWidth(group)
-				if len(items) > maxVisible || used+2+w > budget {
+				if used+2+w > budget {
 					break
 				}
 				items, widths = append(items, group), append(widths, w)
 				used += 2 + w
 			}
-			if a.groupID != 0 && len(items) > 1 && !slices.ContainsFunc(items, func(g Group) bool { return g.ID == a.groupID }) {
+			if a.groupID != 0 && !slices.ContainsFunc(items, func(g Group) bool { return g.ID == a.groupID }) {
 				// Keep the current group in view, in place of the last ones.
 				current := a.currentGroup()
 				w := chipWidth(current)
-				for len(items) > 1 && (used+2+w > budget || len(items) > maxVisible) {
+				for len(items) > 1 && used+2+w > budget {
 					used -= 2 + widths[len(widths)-1]
 					items, widths = items[:len(items)-1], widths[:len(widths)-1]
 				}
@@ -166,6 +166,7 @@ func (a *app) groupMenu(button ui.Element, locale string) {
 func (a *app) selectGroup(id int64) {
 	a.groupID, a.chosen, a.scrollTo = id, 0, true
 	a.cardMenuID, a.typeMenuOpen, a.groupMenuOpen = 0, false, false
+	a.sourceMenuOpen = false
 	a.reload()
 	a.input.Focus()
 }
@@ -193,6 +194,7 @@ func (a *app) cycleGroup(backward bool) {
 
 func (a *app) dismissGroupUI() {
 	a.typeMenuOpen, a.groupMenuOpen, a.groupDialogOpen = false, false, false
+	a.sourceMenuOpen = false
 	a.typeMovePending = false
 	a.groupMode, a.groupName, a.groupError = "", "", ""
 	a.groupEditID, a.groupClipID = 0, 0
@@ -201,6 +203,7 @@ func (a *app) dismissGroupUI() {
 
 func (a *app) editGroup(mode string, group Group, clipID int64, locale string) {
 	a.cardMenuID, a.typeMenuOpen, a.groupMenuOpen = 0, false, false
+	a.sourceMenuOpen = false
 	a.groupSession++
 	a.groupMode, a.groupEditID, a.groupClipID = mode, group.ID, clipID
 	a.groupName, a.groupError = "", ""

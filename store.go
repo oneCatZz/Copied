@@ -173,6 +173,11 @@ func (s *Store) Add(c *Clip) error {
 // List returns the newest clips matching a filter and the text searched
 // for, with a preview of each: the start of its text; Thumb reads its picture.
 func (s *Store) List(filter Filter, query string, groupID ...int64) ([]*Clip, error) {
+	return s.list(filter, query, "", groupID...)
+}
+
+// list also restricts the history to a source app when source is nonempty.
+func (s *Store) list(filter Filter, query, source string, groupID ...int64) ([]*Clip, error) {
 	where, args := []string{"1 = 1"}, []any{previewRunes}
 	switch filter {
 	case FilterText:
@@ -195,9 +200,13 @@ func (s *Store) List(filter Filter, query string, groupID ...int64) ([]*Clip, er
 		args = append(args, groupID[0])
 	}
 	if q := strings.TrimSpace(query); q != "" {
-		where = append(where, `text LIKE ? ESCAPE '\'`)
+		where = append(where, `(text LIKE ? ESCAPE '\' OR source LIKE ? ESCAPE '\')`)
 		q = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(q)
-		args = append(args, "%"+q+"%")
+		args = append(args, "%"+q+"%", "%"+q+"%")
+	}
+	if source != "" {
+		where = append(where, "source = ?")
+		args = append(args, source)
 	}
 	args = append(args, listLimit)
 	rows, err := s.db.Query(context.Background(), `SELECT id, kind, substr(text, 1, ?), width, height, length, pinned, used_at,
@@ -227,6 +236,20 @@ func (s *Store) List(filter Filter, query string, groupID ...int64) ([]*Clip, er
 		clips = append(clips, c)
 	}
 	return clips, nil
+}
+
+// Sources lists known source apps independently of the current search.
+func (s *Store) Sources() ([]string, error) {
+	rows, err := s.db.Query(context.Background(), `SELECT DISTINCT source FROM clips
+		WHERE source <> '' ORDER BY source COLLATE NOCASE`)
+	if err != nil {
+		return nil, err
+	}
+	sources := make([]string, 0, len(rows.Values))
+	for _, row := range rows.Values {
+		sources = append(sources, str(row[0]))
+	}
+	return sources, nil
 }
 
 // Get returns a whole clip, to put on the clipboard. It is nil when the

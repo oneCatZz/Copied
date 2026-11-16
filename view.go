@@ -63,7 +63,7 @@ func (a *app) key(mods ui.Modifiers, key ui.Key) bool {
 	}
 	switch {
 	case key == ui.KeyTab && (mods == 0 || mods == ui.Shift):
-		if a.settingsOpen || a.groupDialogOpen || a.typeMenuOpen || a.groupMenuOpen || a.cardMenuID != 0 {
+		if a.settingsOpen || a.groupDialogOpen || a.typeMenuOpen || a.groupMenuOpen || a.sourceMenuOpen || a.cardMenuID != 0 {
 			return false
 		}
 		a.cycleGroup(mods == ui.Shift)
@@ -155,7 +155,7 @@ func (a *app) view(c *ui.Context) {
 	}
 
 	// The keys the search field leaves, wherever the focus is.
-	if !a.settingsOpen && !a.groupDialogOpen && !a.typeMenuOpen && !a.groupMenuOpen {
+	if !a.settingsOpen && !a.groupDialogOpen && !a.typeMenuOpen && !a.groupMenuOpen && !a.sourceMenuOpen {
 		type combo struct {
 			mods ui.Modifiers
 			key  ui.Key
@@ -200,8 +200,7 @@ func (a *app) view(c *ui.Context) {
 	a.scrollTo = false
 }
 
-// header has the search field, the filters, the number of clips and the
-// settings button.
+// header gives groups their own row, above the search and its filters.
 func (a *app) header(c *ui.Context) {
 	t := c.Theme()
 	tx := locales.In(c.Locale())
@@ -210,15 +209,11 @@ func (a *app) header(c *ui.Context) {
 	if width < 960 {
 		brandWidth = 24
 	}
-	searchWidth := min(float32(300), max(float32(160), width*0.27))
-	if width < 600 {
-		searchWidth = 120
-	}
-	groupWidth := max(float32(100), width-44-brandWidth-searchWidth-118-30-5*12)
+	groupWidth := max(float32(100), width-44-brandWidth-30-2*12)
 	if width >= 1100 {
 		groupWidth -= 62
 	}
-	ui.Row(c).Padding(18, 22, 6, 22).Gap(12).AlignItems(ui.Center).Children(func() {
+	ui.Row(c).Padding(18, 22, 0, 22).Gap(12).AlignItems(ui.Center).Children(func() {
 		ui.Row(c).Width(brandWidth).Shrink(0).Gap(9).AlignItems(ui.Center).Children(func() {
 			ui.Box(c).Size(24, 24).Center().Radius(7).Gradient(t.Accent, kindColor(KindImage, t.Dark), 135).
 				Shadow(0, 4, 10, -2, t.Accent.Alpha(0.5)).Children(func() {
@@ -229,41 +224,7 @@ func (a *app) header(c *ui.Context) {
 			}
 		})
 
-		editTheme := lightEditTheme
-		if t.Dark {
-			editTheme = darkEditTheme
-		}
-		field := ui.Themed(c.Key("search"), editTheme).Row().Width(searchWidth).Shrink(0).Height(34).PaddingX(11).Gap(8).AlignItems(ui.Center).
-			Radius(10).Background(t.Surface)
-		if a.input.Focused(c) {
-			field.Border(1, t.Accent).Shadow(0, 0, 0, 3, t.Accent.Alpha(0.2))
-		} else {
-			field.Border(1, t.Border)
-		}
-		field.Transition(fadeMotion).Children(func() {
-			ui.Icon(c, iconSearch).FontSize(14).TextColor(t.TextMuted)
-			input := ui.TextInputBase(c.Key(searchInputKey(a.searchSession)), &a.query).Bind(&a.input).Grow(1).FontSize(13).
-				CaretColor(t.Accent).
-				Placeholder(tx.SearchHistory()).Label(tx.Search()).
-				OnTextKey(func(k ui.TextKey) bool {
-					return !a.groupDialogOpen && a.key(k.Mods, k.Key)
-				})
-			input.PopoverMenu(func(m *ui.Menu) { m.EditItems() })
-			if input.Changed() {
-				// A space typed first, over a picture, shows it rather than
-				// searching: the search field has the keys while the panel shows.
-				if a.query != "" && strings.TrimSpace(a.query) == "" && a.choosingImage() {
-					a.query = ""
-					a.preview.viewing = true
-					return
-				}
-				a.chosen, a.scrollTo = 0, true
-				a.reload()
-			}
-		})
-
 		a.groupNavigation(c, groupWidth)
-		a.filters(c)
 		if width >= 1100 {
 			ui.Row(c).Width(50).Gap(5).AlignItems(ui.Center).Children(func() {
 				if a.paused.Load() {
@@ -292,6 +253,42 @@ func (a *app) header(c *ui.Context) {
 			ui.Icon(c, iconSettings).FontSize(15).TextColor(color)
 		})
 	})
+	ui.Row(c).Padding(10, 22, 6, 22).Gap(12).AlignItems(ui.Center).Children(func() {
+		editTheme := lightEditTheme
+		if t.Dark {
+			editTheme = darkEditTheme
+		}
+		field := ui.Themed(c.Key("search"), editTheme).Row().Grow(1).Basis(0).MinWidth(0).Height(34).PaddingX(11).Gap(8).AlignItems(ui.Center).
+			Radius(10).Background(t.Surface)
+		if a.input.Focused(c) {
+			field.Border(1, t.Accent).Shadow(0, 0, 0, 3, t.Accent.Alpha(0.2))
+		} else {
+			field.Border(1, t.Border)
+		}
+		field.Transition(fadeMotion).Children(func() {
+			ui.Icon(c, iconSearch).FontSize(14).TextColor(t.TextMuted)
+			input := ui.TextInputBase(c.Key(searchInputKey(a.searchSession)), &a.query).Bind(&a.input).Grow(1).FontSize(13).
+				CaretColor(t.Accent).
+				Placeholder(tx.SearchHistory()).Label(tx.Search()).
+				OnTextKey(func(k ui.TextKey) bool {
+					return !a.groupDialogOpen && !a.sourceMenuOpen && a.key(k.Mods, k.Key)
+				})
+			input.PopoverMenu(func(m *ui.Menu) { m.EditItems() })
+			if input.Changed() {
+				// A space typed first, over a picture, shows it rather than
+				// searching: the search field has the keys while the panel shows.
+				if a.query != "" && strings.TrimSpace(a.query) == "" && a.choosingImage() {
+					a.query = ""
+					a.preview.viewing = true
+					return
+				}
+				a.chosen, a.scrollTo = 0, true
+				a.reload()
+			}
+		})
+		a.sourceFilter(c)
+		a.filters(c)
+	})
 }
 
 // content is the list of clips beside the preview of the chosen one.
@@ -301,7 +298,7 @@ func (a *app) content(c *ui.Context) {
 	if len(a.clips) == 0 {
 		ui.Column(c).Grow(1).Center().Gap(6).Children(func() {
 			msg, hint := tx.EmptyHistory(), tx.EmptyHistoryHint()
-			if a.query != "" || a.filter != FilterAll || a.groupID != 0 {
+			if a.query != "" || a.filter != FilterAll || a.groupID != 0 || a.source != "" {
 				msg, hint = tx.NoMatches(), tx.NoMatchesHint()
 			}
 			ui.Text(c, msg).FontSize(15).FontWeight(600)

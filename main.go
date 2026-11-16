@@ -65,6 +65,8 @@ type app struct {
 	clips         []*Clip
 	filter        Filter
 	query         string
+	source        string
+	sources       []string
 	chosen        int
 	picked        []int64 // clips picked to paste together, in the order picked
 	scrollTo      bool    // the chosen card scrolls into view in the next frame
@@ -79,6 +81,7 @@ type app struct {
 	typeHighlight   Filter
 	typeMovePending bool
 	groupMenuOpen   bool
+	sourceMenuOpen  bool
 	groupDialogOpen bool
 	groupMode       string
 	groupEditID     int64
@@ -119,7 +122,16 @@ func (a *app) reload() {
 	if a.groupID != 0 && !a.hasGroup(a.groupID) {
 		a.groupID = 0
 	}
-	clips, err := a.store.List(a.filter, a.query, a.groupID)
+	sources, err := a.store.Sources()
+	if err != nil {
+		log.Print("listing source apps: ", err)
+		return
+	}
+	a.sources = sources
+	if a.source != "" && !slices.Contains(sources, a.source) {
+		a.source = ""
+	}
+	clips, err := a.store.list(a.filter, a.query, a.source, a.groupID)
 	if err != nil {
 		log.Print("listing clips: ", err)
 		return
@@ -150,6 +162,7 @@ func (a *app) choose(i int) {
 func (a *app) setFilter(f Filter, _ time.Time) {
 	a.cardMenuID = 0
 	a.typeMenuOpen = false
+	a.sourceMenuOpen = false
 	a.filter = f
 	a.chosen = 0
 	a.scrollTo = true
@@ -301,6 +314,7 @@ func (a *app) show() {
 	a.panel.SetSize(width, height)
 	a.panel.SetPosition(d.WorkArea.X+(d.WorkArea.Width-width)/2, d.WorkArea.Y+(d.WorkArea.Height-height)/2)
 	a.query, a.filter, a.chosen, a.scrollTo = "", FilterAll, 0, true
+	a.source = ""
 	a.picked = nil
 	// Reveal alone can leave the first row flush against the viewport edge.
 	// Reset its offset so the padding returns too.
