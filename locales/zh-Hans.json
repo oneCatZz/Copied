@@ -100,5 +100,6 @@
   "lineCount": "{count} 行",
   "wrapLines": "自动换行",
   "previewTruncated": "预览已截断，粘贴时仍为完整内容。",
-  "actualSize": "原始大小"
+  "imageActualHint": "单击图片切换原始大小",
+  "imageCloseHint": "点击空白处或按 Esc 关闭"
 }

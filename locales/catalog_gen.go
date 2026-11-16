@@ -1034,12 +1034,22 @@ func (msgs Messages) PreviewTruncated() string {
 	return Catalog.Format(msgs.locale, "previewTruncated", nil)
 }
 
-// ActualSize says "Actual size"
+// ImageActualHint says "Click the picture for actual size"
 // in the language the app shows.
-func ActualSize() string { return In(i18n.Locale()).ActualSize() }
+func ImageActualHint() string { return In(i18n.Locale()).ImageActualHint() }
 
-// ActualSize says "Actual size"
+// ImageActualHint says "Click the picture for actual size"
 // in the language of msgs.
-func (msgs Messages) ActualSize() string {
-	return Catalog.Format(msgs.locale, "actualSize", nil)
+func (msgs Messages) ImageActualHint() string {
+	return Catalog.Format(msgs.locale, "imageActualHint", nil)
+}
+
+// ImageCloseHint says "Click outside or press Esc to close"
+// in the language the app shows.
+func ImageCloseHint() string { return In(i18n.Locale()).ImageCloseHint() }
+
+// ImageCloseHint says "Click outside or press Esc to close"
+// in the language of msgs.
+func (msgs Messages) ImageCloseHint() string {
+	return Catalog.Format(msgs.locale, "imageCloseHint", nil)
 }

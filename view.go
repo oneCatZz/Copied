@@ -54,6 +54,13 @@ func cmdCap() string {
 
 // key does what a key of the panel does, and reports whether it took it.
 func (a *app) key(mods ui.Modifiers, key ui.Key) bool {
+	if a.preview.viewing {
+		// Over a picture shown large, keys only close it.
+		if mods == 0 && key == ui.KeyEscape {
+			a.preview.viewing = false
+		}
+		return true
+	}
 	switch {
 	case key == ui.KeyTab && (mods == 0 || mods == ui.Shift):
 		if a.settingsOpen || a.groupDialogOpen || a.typeMenuOpen || a.groupMenuOpen || a.cardMenuID != 0 {
@@ -174,6 +181,7 @@ func (a *app) view(c *ui.Context) {
 		a.footer(c)
 		a.settingsDialog(c)
 		a.groupDialog(c)
+		a.imageViewer(c)
 	})
 	a.scrollTo = false
 }

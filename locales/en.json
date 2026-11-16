@@ -100,5 +100,6 @@
   "lineCount": "{count, plural, one {# line} other {# lines}}",
   "wrapLines": "Wrap lines",
   "previewTruncated": "Preview shortened. Pasting keeps the full content.",
-  "actualSize": "Actual size"
+  "imageActualHint": "Click the picture for actual size",
+  "imageCloseHint": "Click outside or press Esc to close"
 }
