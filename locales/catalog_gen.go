@@ -1033,3 +1033,13 @@ func PreviewTruncated() string { return In(i18n.Locale()).PreviewTruncated() }
 func (msgs Messages) PreviewTruncated() string {
 	return Catalog.Format(msgs.locale, "previewTruncated", nil)
 }
+
+// ActualSize says "Actual size"
+// in the language the app shows.
+func ActualSize() string { return In(i18n.Locale()).ActualSize() }
+
+// ActualSize says "Actual size"
+// in the language of msgs.
+func (msgs Messages) ActualSize() string {
+	return Catalog.Format(msgs.locale, "actualSize", nil)
+}

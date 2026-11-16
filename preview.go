@@ -34,6 +34,7 @@ type clipPreview struct {
 	gen      uint64 // advances as the preview changes clips, to reject stale reads
 	loaded   bool
 	original *thumb // the whole picture of an image clip, once it decoded
+	actual   bool   // the picture shows at its own size, to scroll around in
 	previewBody
 }
 
@@ -274,25 +275,14 @@ func (a *app) detail(c *ui.Context) (action func()) {
 				meta += " · " + tx.LineCount(p.lines)
 			}
 			ui.Text(c, meta).FontSize(11.5).TextColor(t.TextMuted).SingleLine().Grow(1)
-			if clip.Kind == KindCode {
-				wrap := ui.ButtonBase(c.Key("wrap-lines")).Height(24).PaddingX(8).Radius(6).
-					Cursor(ui.CursorPointer).Label(tx.WrapLines()).Border(1, t.Border)
-				ink := t.TextMuted
-				switch {
-				case a.codeWrap:
-					wrap.Background(t.Accent.Alpha(0.12)).Border(1, t.Accent.Alpha(0.4))
-					ink = t.Accent
-				case wrap.Hovered():
-					wrap.Background(t.SurfaceHover)
-					ink = t.Text
-				}
-				if wrap.Clicked() {
-					a.codeWrap = !a.codeWrap
-					a.input.Focus()
-				}
-				wrap.Transition(fadeMotion).Children(func() {
-					ui.Text(c, tx.WrapLines()).FontSize(11).TextColor(ink).SingleLine()
-				})
+			if clip.Kind == KindCode && toggleButton(c, "wrap-lines", tx.WrapLines(), a.codeWrap) {
+				a.codeWrap = !a.codeWrap
+				a.input.Focus()
+			}
+			if clip.Kind == KindImage && p.original != nil && p.original.bitmap != nil &&
+				toggleButton(c, "actual-size", tx.ActualSize(), p.actual) {
+				p.actual = !p.actual
+				a.input.Focus()
 			}
 			when := ago(clip.UsedAt, c.Locale())
 			if clip.Source != "" {
@@ -340,6 +330,27 @@ func (a *app) detail(c *ui.Context) (action func()) {
 	return action
 }
 
+// toggleButton is a small button in the preview's heading that stays lit
+// while its setting is on. It reports whether it was clicked.
+func toggleButton(c *ui.Context, key, label string, on bool) bool {
+	t := c.Theme()
+	button := ui.ButtonBase(c.Key(key)).Height(24).PaddingX(8).Radius(6).
+		Cursor(ui.CursorPointer).Label(label).Border(1, t.Border)
+	ink := t.TextMuted
+	switch {
+	case on:
+		button.Background(t.Accent.Alpha(0.12)).Border(1, t.Accent.Alpha(0.4))
+		ink = t.Accent
+	case button.Hovered():
+		button.Background(t.SurfaceHover)
+		ink = t.Text
+	}
+	button.Transition(fadeMotion).Children(func() {
+		ui.Text(c, label).FontSize(11).TextColor(ink).SingleLine()
+	})
+	return button.Clicked()
+}
+
 // previewContent is the middle of the preview: the whole text, code, link
 // or list of files, scrolling, or a picture or a color.
 func (a *app) previewContent(c *ui.Context, clip *Clip, p *clipPreview, hue ui.Color) {
@@ -355,11 +366,31 @@ func (a *app) previewContent(c *ui.Context, clip *Clip, p *clipPreview, hue ui.C
 			th.pinned = false
 		}
 		a.thumbLimit = thumbCacheLimit
+		if original := p.original; p.actual && original != nil && original.bitmap != nil {
+			// Every pixel of the picture, scrolling both ways; a click fits
+			// it in again.
+			w, h := original.bitmap.Size()
+			ui.ScrollBoth(c.Key(previewKey{id: clip.ID})).Grow(1).Basis(0).Padding(14).Children(func() {
+				image := ui.Image(c.Key("preview-image"), original.bitmap).Size(float32(w), float32(h)).Shrink(0).
+					Radius(8).Cursor(ui.CursorZoomOut)
+				if image.Clicked() {
+					p.actual = false
+					a.input.Focus()
+				}
+				original.releasePixels(c, image)
+			})
+			return
+		}
 		ui.Box(c).Grow(1).Basis(0).Padding(14).Children(func() {
 			// The whole picture at its own size where it fits, its thumbnail
-			// until it decoded.
+			// until it decoded. A click shows it at its own size.
 			if original := p.original; original != nil && original.bitmap != nil {
-				image := ui.Image(c, original.bitmap).Fill().Fit(ui.ScaleDown).Radius(8)
+				image := ui.Image(c.Key("preview-image"), original.bitmap).Fill().Fit(ui.ScaleDown).Radius(8).
+					Cursor(ui.CursorZoomIn)
+				if image.Clicked() {
+					p.actual = true
+					a.input.Focus()
+				}
 				original.releasePixels(c, image)
 				return
 			}
