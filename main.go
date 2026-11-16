@@ -91,6 +91,11 @@ type app struct {
 	groupMembers    map[int64]*bool
 	groupSession    uint64
 
+	sourceHighlight   string
+	sourceMovePending bool
+	sourcePrefix      string
+	sourceTypedAt     time.Time
+
 	filterFlow filterFlow
 	thumbSlots chan struct{} // bounds background thumbnail reads and decoding
 	thumbClock uint64
