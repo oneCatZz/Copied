@@ -8,6 +8,7 @@ import (
 	"image/draw"
 	"image/png"
 	"log"
+	"strings"
 	"syscall"
 	"time"
 	"unsafe"
@@ -29,6 +30,7 @@ var (
 	procMsgWaitForMultipleObjects  = user32.NewProc("MsgWaitForMultipleObjectsEx")
 	procPeekMessageW               = user32.NewProc("PeekMessageW")
 	procGetClassNameW              = user32.NewProc("GetClassNameW")
+	procGetWindowThreadProcessId   = user32.NewProc("GetWindowThreadProcessId")
 	kernel32                       = syscall.NewLazyDLL("kernel32.dll")
 	procGlobalAlloc                = kernel32.NewProc("GlobalAlloc")
 	procGlobalLock                 = kernel32.NewProc("GlobalLock")
@@ -90,7 +92,8 @@ func writeImageText(data []byte, text string) error {
 }
 
 // terminalWindow reports whether a window is a terminal's: Windows
-// Terminal's, the console's or mintty's (Git Bash).
+// Terminal's, the console's, mintty's (Git Bash), or any app's hosting a
+// pseudo console, in which terminal apps run their shells.
 func terminalWindow(h uintptr) bool {
 	if h == 0 {
 		return false
@@ -100,6 +103,45 @@ func terminalWindow(h uintptr) bool {
 	switch syscall.UTF16ToString(name[:n]) {
 	case "CASCADIA_HOSTING_WINDOW_CLASS", "ConsoleWindowClass", "mintty":
 		return true
+	}
+	var pid uint32
+	procGetWindowThreadProcessId.Call(h, uintptr(unsafe.Pointer(&pid)))
+	return pid != 0 && hostsConsole(pid)
+}
+
+// hostsConsole reports whether a process runs a console host (OpenConsole
+// or conhost), itself or through a process of the same program, as an app
+// of several processes does.
+func hostsConsole(pid uint32) bool {
+	snapshot, err := syscall.CreateToolhelp32Snapshot(syscall.TH32CS_SNAPPROCESS, 0)
+	if err != nil {
+		return false
+	}
+	defer syscall.CloseHandle(snapshot)
+	type process struct {
+		parent uint32
+		exe    string
+	}
+	processes := map[uint32]process{}
+	var e syscall.ProcessEntry32
+	e.Size = uint32(unsafe.Sizeof(e))
+	for err = syscall.Process32First(snapshot, &e); err == nil; err = syscall.Process32Next(snapshot, &e) {
+		processes[e.ProcessID] = process{e.ParentProcessID, strings.ToLower(syscall.UTF16ToString(e.ExeFile[:]))}
+	}
+	app := processes[pid].exe
+	if app == "" {
+		return false
+	}
+	for _, p := range processes {
+		if p.exe != "openconsole.exe" && p.exe != "conhost.exe" {
+			continue
+		}
+		if p.parent == pid {
+			return true
+		}
+		if host, ok := processes[p.parent]; ok && host.parent == pid && host.exe == app {
+			return true
+		}
 	}
 	return false
 }

@@ -191,7 +191,7 @@ func (a *app) copyClip(id int64, plain bool) bool {
 // was in.
 func (a *app) paste(i int, plain bool) {
 	target := a.target
-	if !a.copyForTerminal(i, target) && !a.copy(i, plain) {
+	if !a.copyImagePath(i, target, plain) && !a.copy(i, plain) {
 		return
 	}
 	a.panel.Hide()

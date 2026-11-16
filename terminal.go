@@ -12,13 +12,16 @@ import (
 // imageFileAge is how long a picture saved for a terminal is kept.
 const imageFileAge = 24 * time.Hour
 
-// copyForTerminal puts a picture chosen to paste into a terminal on the
-// clipboard together with the path of a file holding it. A terminal pastes
-// only text, and Claude Code and Codex take the path of a picture pasted
-// into them for the picture. It reports false for anything else, to be
-// copied as usual.
-func (a *app) copyForTerminal(i int, target uintptr) bool {
-	if i < 0 || i >= len(a.clips) || a.clips[i].Kind != KindImage || a.batchIDs(i) != nil || !terminalWindow(target) {
+// copyImagePath puts a picture to paste into a terminal, or as plain text
+// anywhere, on the clipboard together with the path of a file holding it.
+// A terminal pastes only text, and Claude Code and Codex take the path of a
+// picture pasted into them for the picture. It reports false for anything
+// else, to be copied as usual.
+func (a *app) copyImagePath(i int, target uintptr, plain bool) bool {
+	if i < 0 || i >= len(a.clips) || a.clips[i].Kind != KindImage || a.batchIDs(i) != nil {
+		return false
+	}
+	if !plain && !terminalWindow(target) {
 		return false
 	}
 	id := a.clips[i].ID
@@ -36,7 +39,13 @@ func (a *app) copyForTerminal(i int, target uintptr) bool {
 		path = `"` + path + `"`
 	}
 	a.ownUntil.Store(time.Now().Add(ownWrite).UnixMilli())
-	if err := writeImageText(clip.Data, path); err != nil {
+	if plain {
+		// Only the path then, which any app pastes as text.
+		err = writeClipboard(&Clip{Kind: KindText, Text: path}, true)
+	} else {
+		err = writeImageText(clip.Data, path)
+	}
+	if err != nil {
 		log.Print("writing the clipboard: ", err)
 		return false
 	}
