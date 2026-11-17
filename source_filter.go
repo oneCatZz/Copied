@@ -67,6 +67,9 @@ func (a *app) sourcePicker(c *ui.Context, t *ui.Theme, token ui.Element) {
 		})
 	if a.sourceOpenPending {
 		cb.SetOpen(true)
+		// MyGo v0.9.0 opens with its widget-local highlight at -1. Seed the
+		// first option once; later typing and navigation stay with the combobox.
+		*ui.Local(cb.Input, "highlight", func() int { return -1 }) = 0
 		a.sourceOpenPending = false
 	}
 	width, height := c.Size()
