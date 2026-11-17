@@ -113,12 +113,16 @@ func kindIcon(k Kind) *ui.SVG {
 var (
 	// Hovers and selections fade.
 	fadeMotion = ui.ElementTransition{Colors: true, Shadows: true, Duration: 140 * time.Millisecond}
-	// Dropdowns enter gently and leave sooner, keeping search and navigation immediate.
+	// Dropdowns rise like the main panel; their options follow one after another.
 	dropdownMotion = ui.ElementTransition{
 		Colors: true, Shadows: true,
-		Duration: 160 * time.Millisecond, ExitDuration: 100 * time.Millisecond,
-		Enter: &ui.Motion{Y: -6, Scale: 0.985, Opacity: 0, Flip: true},
-		Exit:  &ui.Motion{Y: -3, Scale: 0.99, Opacity: 0, Flip: true},
+		Duration: riseTime, ExitDuration: 140 * time.Millisecond,
+		Ease: func(t float32) float32 {
+			x := 1 - t
+			return 1 - x*x*x*x
+		},
+		Enter: &ui.Motion{Y: 24, Opacity: 0, Flip: true},
+		Exit:  &ui.Motion{Y: 8, Opacity: 0, Flip: true},
 	}
 )
 
@@ -130,6 +134,27 @@ const (
 	cardStagger = 32 * time.Millisecond
 	cardsRising = 12 // the cards after them are out of sight, or nearly
 )
+
+// The popup owns its entrance clock, so typing and selection do not restart it.
+func dropdownEntrance(c *ui.Context, panel ui.Element) time.Duration {
+	if c.Preferences().ReduceMotion {
+		return 0
+	}
+	shownAt := ui.Local(panel, "dropdown-shown-at", func() time.Time { return c.Now() })
+	panel.Transition(dropdownMotion)
+	return c.Now().Sub(*shownAt)
+}
+
+func dropdownItemEntrance(c *ui.Context, item ui.Element, since time.Duration, i int) {
+	if c.Preferences().ReduceMotion || i >= cardsRising {
+		return
+	}
+	e := rise(since-riseTime/3-time.Duration(i)*cardStagger, cardRise)
+	if e < 1 {
+		item.Translate(0, (1-e)*16).Opacity(e)
+		c.Invalidate()
+	}
+}
 
 // rise is how far along something that takes d is, after since: from 0 to
 // 1, fast then slow.

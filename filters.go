@@ -80,9 +80,7 @@ func (a *app) filters(c *ui.Context) {
 	sel.Popup(func(panel ui.Element) {
 		panel.Key(headerMenuKey{a.searchSession, "type-popup"})
 		popupSurface(c, panel).Width(272).Padding(10).Radius(14).Margin(7, 0, 0, 0).Gap(8)
-		if !c.Preferences().ReduceMotion {
-			panel.TransformOrigin(0, 0).Transition(dropdownMotion)
-		}
+		since := dropdownEntrance(c, panel)
 		ui.Text(c, tx.ClipboardTypes()).FontSize(10.5).FontWeight(550).TextColor(t.TextMuted).Padding(2, 4)
 		ui.Grid(c).Columns(2).Gap(6).Children(func() {
 			for i, label := range labels[:int(FilterPinned)] {
@@ -90,6 +88,7 @@ func (a *app) filters(c *ui.Context) {
 				ink := filterColor(filter, t)
 				item := sel.Item(filter).Height(48).PaddingX(9).Gap(8).AlignItems(ui.Center).
 					Radius(10).Cursor(ui.CursorPointer).Label(label).Border(1, ui.Transparent)
+				dropdownItemEntrance(c, item, since, i/2)
 				if item.Highlighted() {
 					a.typeHighlight = filter
 					item.Background(t.SurfaceHover).Border(1, t.Border.Alpha(0.7))

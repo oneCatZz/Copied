@@ -78,9 +78,7 @@ func (a *app) sourcePicker(c *ui.Context, t *ui.Theme, token ui.Element) {
 		panel.Key(headerMenuKey{a.searchSession, "source-popup"})
 		popupSurface(c, panel).AttachTo(token, ui.AnchorBottomStart, ui.AnchorTopStart).
 			MinWidth(0).Width(min(float32(380), width-44)).Padding(10).Radius(14).Margin(8, 0, 0, 0).Gap(8)
-		if !c.Preferences().ReduceMotion {
-			panel.TransformOrigin(0, 0).Transition(dropdownMotion)
-		}
+		since := dropdownEntrance(c, panel)
 		ui.Text(c, tx.SourceApps()).FontSize(10.5).FontWeight(550).TextColor(t.TextMuted).Padding(2, 4)
 		options := a.matchingSources(a.sourceQuery, tx.All())
 		listHeight := min(float32(len(options)*40-4), max(float32(36), min(float32(320), height-190)))
@@ -88,13 +86,14 @@ func (a *app) sourcePicker(c *ui.Context, t *ui.Theme, token ui.Element) {
 			ui.Text(c, tx.NoSourceApps()).FontSize(12).TextColor(t.TextMuted).Padding(10)
 		} else {
 			ui.Scroll(c.Key("source-options")).Height(listHeight).Gap(4).Children(func() {
-				for _, source := range options {
+				for i, source := range options {
 					label := source
 					if source == "" {
 						label = tx.All()
 					}
 					item := cb.Item(source).Height(36).Shrink(0).PaddingX(9).Gap(8).AlignItems(ui.Center).
 						Radius(10).Cursor(ui.CursorPointer).Label(label).Description(label).Border(1, ui.Transparent)
+					dropdownItemEntrance(c, item, since, i)
 					if item.Highlighted() {
 						item.Background(t.SurfaceHover).Border(1, t.Border.Alpha(0.7))
 					}
