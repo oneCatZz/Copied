@@ -113,6 +113,13 @@ func kindIcon(k Kind) *ui.SVG {
 var (
 	// Hovers and selections fade.
 	fadeMotion = ui.ElementTransition{Colors: true, Shadows: true, Duration: 140 * time.Millisecond}
+	// Dropdowns enter gently and leave sooner, keeping search and navigation immediate.
+	dropdownMotion = ui.ElementTransition{
+		Colors: true, Shadows: true,
+		Duration: 160 * time.Millisecond, ExitDuration: 100 * time.Millisecond,
+		Enter: &ui.Motion{Y: -6, Scale: 0.985, Opacity: 0, Flip: true},
+		Exit:  &ui.Motion{Y: -3, Scale: 0.99, Opacity: 0, Flip: true},
+	}
 )
 
 // The panel's content rises as the panel shows, and its cards after it,

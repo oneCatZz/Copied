@@ -21,6 +21,7 @@ func (a *app) sourceFilter(c *ui.Context, t *ui.Theme) ui.Element {
 		Radius(7).Background(t.Accent.Alpha(0.09)).Border(1, t.Accent.Alpha(0.22)).Children(func() {
 			trigger := ui.ButtonBase(c.Key(headerMenuKey{a.searchSession, "source"})).Height(24).PaddingX(3).Gap(5).
 				MaxWidth(min(float32(220), width*0.3)).AlignItems(ui.Center).Cursor(ui.CursorPointer).
+				KeepFocus().
 				Label(tx.SourceApps()).Description(tx.SourceAppShortcut(strings.Join(keycaps(a.sourceShortcut()), "+"))).
 				OnClick(func() {
 					if a.sourceMenuOpen {
@@ -74,8 +75,12 @@ func (a *app) sourcePicker(c *ui.Context, t *ui.Theme, token ui.Element) {
 	}
 	width, height := c.Size()
 	cb.Popup(func(panel ui.Element) {
+		panel.Key(headerMenuKey{a.searchSession, "source-popup"})
 		popupSurface(c, panel).AttachTo(token, ui.AnchorBottomStart, ui.AnchorTopStart).
 			MinWidth(0).Width(min(float32(380), width-44)).Padding(10).Radius(14).Margin(8, 0, 0, 0).Gap(8)
+		if !c.Preferences().ReduceMotion {
+			panel.TransformOrigin(0, 0).Transition(dropdownMotion)
+		}
 		ui.Text(c, tx.SourceApps()).FontSize(10.5).FontWeight(550).TextColor(t.TextMuted).Padding(2, 4)
 		options := a.matchingSources(a.sourceQuery, tx.All())
 		listHeight := min(float32(len(options)*40-4), max(float32(36), min(float32(320), height-190)))

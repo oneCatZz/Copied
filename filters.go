@@ -78,7 +78,11 @@ func (a *app) filters(c *ui.Context) {
 		a.typeMovePending = false
 	}
 	sel.Popup(func(panel ui.Element) {
+		panel.Key(headerMenuKey{a.searchSession, "type-popup"})
 		popupSurface(c, panel).Width(272).Padding(10).Radius(14).Margin(7, 0, 0, 0).Gap(8)
+		if !c.Preferences().ReduceMotion {
+			panel.TransformOrigin(0, 0).Transition(dropdownMotion)
+		}
 		ui.Text(c, tx.ClipboardTypes()).FontSize(10.5).FontWeight(550).TextColor(t.TextMuted).Padding(2, 4)
 		ui.Grid(c).Columns(2).Gap(6).Children(func() {
 			for i, label := range labels[:int(FilterPinned)] {
