@@ -6,8 +6,11 @@ import (
 	"encoding/hex"
 	"fmt"
 	"image"
+	_ "image/gif"  // picture files
+	_ "image/jpeg" // picture files
 	"image/png"
 	"net/url"
+	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -18,7 +21,9 @@ import (
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/transfer"
+	_ "golang.org/x/image/bmp" // picture files
 	"golang.org/x/image/draw"
+	_ "golang.org/x/image/webp" // picture files
 )
 
 // Kind is what a clip holds.
@@ -70,11 +75,19 @@ func (c *Clip) imageFile() string {
 	if len(files) != 1 {
 		return ""
 	}
-	switch strings.ToLower(filepath.Ext(files[0])) {
-	case ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp":
-		return files[0]
+	if !isImagePath(files[0]) {
+		return ""
 	}
-	return ""
+	return files[0]
+}
+
+// isImagePath reports whether a file is a picture by its extension.
+func isImagePath(path string) bool {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp":
+		return true
+	}
+	return false
 }
 
 const thumbSize = 520 // pixels, the longer side of a card's picture
@@ -104,6 +117,13 @@ func readClipboard() *Clip {
 	formats := mygo.Clipboard.Formats()
 	if slices.Contains(formats, transfer.FileList) || slices.Contains(formats, transfer.URIList) {
 		if files, err := mygo.Clipboard.ReadFiles(); err == nil && len(files) > 0 {
+			// One picture, as WeChat copies it, is kept as the picture: the
+			// file may go before it is pasted.
+			if len(files) == 1 && isImagePath(files[0]) {
+				if c := imageFileClip(files[0]); c != nil {
+					return c
+				}
+			}
 			text := strings.Join(files, "\n")
 			return &Clip{Kind: KindFiles, Text: text, Length: len(files), Hash: hashOf(KindFiles, []byte(text))}
 		}
@@ -146,6 +166,53 @@ func imageClip(data []byte) *Clip {
 	if err != nil {
 		return nil
 	}
+	return imageClipOf(img, data)
+}
+
+// lastImageFile is the clip the picture file last on the clipboard made,
+// so that watching the clipboard does not decode it again.
+var lastImageFile struct {
+	path    string
+	size    int64
+	modTime time.Time
+	clip    *Clip
+}
+
+// imageFileClip makes a clip of a picture file, as a PNG, or returns nil
+// when it does not read or decode.
+func imageFileClip(path string) *Clip {
+	info, err := os.Stat(path)
+	if err != nil || !info.Mode().IsRegular() || info.Size() > imageFileLimit {
+		return nil
+	}
+	last := &lastImageFile
+	if last.clip != nil && last.path == path && last.size == info.Size() && last.modTime.Equal(info.ModTime()) {
+		c := *last.clip
+		return &c
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	img, format, err := image.Decode(bytes.NewReader(data))
+	if err != nil {
+		return nil
+	}
+	if format != "png" {
+		var buf bytes.Buffer
+		if png.Encode(&buf, img) != nil {
+			return nil
+		}
+		data = buf.Bytes()
+	}
+	c := imageClipOf(img, data)
+	last.path, last.size, last.modTime, last.clip = path, info.Size(), info.ModTime(), c
+	copied := *c
+	return &copied
+}
+
+// imageClipOf makes a clip of a decoded picture and its PNG.
+func imageClipOf(img image.Image, data []byte) *Clip {
 	b := img.Bounds()
 	c := &Clip{Kind: KindImage, Data: data, Width: b.Dx(), Height: b.Dy(), Hash: hashOf(KindImage, data)}
 	c.Thumb = data
