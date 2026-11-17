@@ -11,17 +11,17 @@ import (
 var sourceCloseIcon = svg(`<path d="m6 6 12 12M18 6 6 18"/>`)
 
 // sourceFilter is a token inside the search field, before its text input.
-func (a *app) sourceFilter(c *ui.Context, t *ui.Theme) {
+func (a *app) sourceFilter(c *ui.Context, t *ui.Theme) ui.Element {
 	tx := locales.In(c.Locale())
 	width, _ := c.Size()
 	if !a.sourceMenuOpen {
 		a.sourceSearch.CancelFocus(c)
 	}
-	ui.Row(c.Key("source-token")).Height(26).Shrink(0).Gap(2).PaddingX(4).
+	token := ui.Row(c.Key("source-token")).Height(26).Shrink(0).Gap(2).PaddingX(4).
 		Radius(7).Background(t.Accent.Alpha(0.09)).Border(1, t.Accent.Alpha(0.22)).Children(func() {
 			trigger := ui.ButtonBase(c.Key(headerMenuKey{a.searchSession, "source"})).Height(24).PaddingX(3).Gap(5).
 				MaxWidth(min(float32(220), width*0.3)).AlignItems(ui.Center).Cursor(ui.CursorPointer).
-				Label(tx.SourceApps()).Description(tx.SourceAppShortcut()).
+				Label(tx.SourceApps()).Description(tx.SourceAppShortcut(strings.Join(keycaps(a.sourceShortcut()), "+"))).
 				OnClick(func() {
 					if a.sourceMenuOpen {
 						a.sourceMenuOpen = false
@@ -47,17 +47,18 @@ func (a *app) sourceFilter(c *ui.Context, t *ui.Theme) {
 					})
 			}
 		})
+	return token
 }
 
 // sourcePicker uses a real text input. Composition, candidate confirmation
 // and navigation belong to the combobox, including when an IME is active.
-func (a *app) sourcePicker(c *ui.Context, t *ui.Theme) {
+func (a *app) sourcePicker(c *ui.Context, t *ui.Theme, token ui.Element) {
 	tx := locales.In(c.Locale())
 	cb := ui.ComboboxBase(c.Key(headerMenuKey{a.searchSession, "source-input"}), &a.sourceQuery)
 	cb.Input.Bind(&a.sourceSearch).Grow(1).MinWidth(0).FontSize(13).CaretColor(t.Accent).
 		Placeholder(tx.SearchSourceApps()).Label(tx.SourceApps()).AutoComplete(ui.AutoCompleteList).
 		OnTextKey(func(k ui.TextKey) bool {
-			if k.Mods == ui.Cmd|ui.Shift && k.Key == ui.KeyA {
+			if a.isSourceShortcut(k.Mods, k.Key) {
 				a.sourceMenuOpen = false
 				a.input.Focus()
 				return true
@@ -70,7 +71,8 @@ func (a *app) sourcePicker(c *ui.Context, t *ui.Theme) {
 	}
 	width, height := c.Size()
 	cb.Popup(func(panel ui.Element) {
-		popupSurface(c, panel).MinWidth(0).Width(min(float32(380), width-44)).Padding(10).Radius(14).Margin(8, 0, 0, 0).Gap(8)
+		popupSurface(c, panel).AttachTo(token, ui.AnchorBottomStart, ui.AnchorTopStart).
+			MinWidth(0).Width(min(float32(380), width-44)).Padding(10).Radius(14).Margin(8, 0, 0, 0).Gap(8)
 		ui.Text(c, tx.SourceApps()).FontSize(10.5).FontWeight(550).TextColor(t.TextMuted).Padding(2, 4)
 		options := a.matchingSources(a.sourceQuery, tx.All())
 		listHeight := min(float32(len(options)*40-4), max(float32(36), min(float32(320), height-190)))

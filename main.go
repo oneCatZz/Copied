@@ -55,6 +55,7 @@ type app struct {
 	settingsOpen   bool          // the settings dialog shows
 	recording      bool          // the dialog waits for the keys of a new shortcut
 	recordingStack bool          // the recorder edits the stack shortcut
+	recordingSource bool         // the recorder edits the window-local app selector
 	recordError    string
 	quitting       bool // the app quits: the panel closes rather than hides
 	panelIdle      *time.Timer
@@ -476,6 +477,7 @@ func (a *app) startRecording(stack bool) {
 	}
 	a.recording, a.recordError = true, ""
 	a.recordingStack = stack
+	a.recordingSource = false
 	if a.shortcut != "" {
 		a.globalShortcuts().Unregister(a.shortcut)
 	}
@@ -501,15 +503,23 @@ func (a *app) startRecording(stack bool) {
 // when there is none or the system refuses it.
 func (a *app) stopRecording(shortcut string) {
 	stack := a.recordingStack
+	source := a.recordingSource
 	a.recording = false
 	a.recordingStack = false
+	a.recordingSource = false
 	defer a.resumeShortcuts()
 	if a.recordCapture != "" {
 		a.globalShortcuts().Unregister(a.recordCapture)
 		a.recordCapture = ""
 	}
-	if shortcut != "" && a.changeShortcut(shortcut, stack) {
-		a.saveSettings()
+	if shortcut != "" {
+		if source {
+			if a.changeSourceShortcut(shortcut) {
+				a.saveSettings()
+			}
+		} else if a.changeShortcut(shortcut, stack) {
+			a.saveSettings()
+		}
 	}
 }
 

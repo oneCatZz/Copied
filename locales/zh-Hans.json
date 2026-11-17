@@ -68,7 +68,7 @@
   "searchSourceApps": "输入应用名称…",
   "noSourceApps": "没有匹配的应用",
   "clearSourceApp": "清除应用筛选",
-  "sourceAppShortcut": "输入 @ 或按 Ctrl/⌘+Shift+A 选择应用",
+  "sourceAppShortcut": "输入 @ 或按 {shortcut} 选择应用",
   "sourceAppKeys": "↑↓ 选择 · Enter 确认 · Esc 取消",
   "appFilter": "应用：{name}",
   "typeFilter": "类型：{name}",
@@ -109,5 +109,10 @@
   "wrapLines": "自动换行",
   "previewTruncated": "预览已截断，粘贴时仍为完整内容。",
   "viewImage": "查看大图",
-  "imageViewerHint": "滚轮或双指捏合缩放 · 拖动移动 · 双击适应窗口 · 空格或 Esc 关闭"
+  "imageViewerHint": "滚轮或双指捏合缩放 · 拖动移动 · 双击适应窗口 · 空格或 Esc 关闭",
+  "sourceShortcut": "应用选择快捷键",
+  "sourceShortcutHint": "在面板内筛选来源应用",
+  "resetSourceShortcut": "恢复应用选择默认快捷键",
+  "sourceShortcutConflict": "应用选择、面板和 Stack 不能使用相同的快捷键。",
+  "sourceShortcutReserved": "请使用其他组合键，这个快捷键已用于编辑或面板操作。"
 }

@@ -714,14 +714,14 @@ func (msgs Messages) ClearSourceApp() string {
 	return Catalog.Format(msgs.locale, "clearSourceApp", nil)
 }
 
-// SourceAppShortcut says "Type @ or press Ctrl/Command+Shift+A to choose an app"
+// SourceAppShortcut says "Type @ or press {shortcut} to choose an app"
 // in the language the app shows.
-func SourceAppShortcut() string { return In(i18n.Locale()).SourceAppShortcut() }
+func SourceAppShortcut(shortcut string) string { return In(i18n.Locale()).SourceAppShortcut(shortcut) }
 
-// SourceAppShortcut says "Type @ or press Ctrl/Command+Shift+A to choose an app"
+// SourceAppShortcut says "Type @ or press {shortcut} to choose an app"
 // in the language of msgs.
-func (msgs Messages) SourceAppShortcut() string {
-	return Catalog.Format(msgs.locale, "sourceAppShortcut", nil)
+func (msgs Messages) SourceAppShortcut(shortcut string) string {
+	return Catalog.Format(msgs.locale, "sourceAppShortcut", map[string]any{"shortcut": shortcut})
 }
 
 // SourceAppKeys says "Up/Down select · Enter confirm · Esc cancel"
@@ -1132,4 +1132,54 @@ func ImageViewerHint() string { return In(i18n.Locale()).ImageViewerHint() }
 // in the language of msgs.
 func (msgs Messages) ImageViewerHint() string {
 	return Catalog.Format(msgs.locale, "imageViewerHint", nil)
+}
+
+// SourceShortcut says "App selection shortcut"
+// in the language the app shows.
+func SourceShortcut() string { return In(i18n.Locale()).SourceShortcut() }
+
+// SourceShortcut says "App selection shortcut"
+// in the language of msgs.
+func (msgs Messages) SourceShortcut() string {
+	return Catalog.Format(msgs.locale, "sourceShortcut", nil)
+}
+
+// SourceShortcutHint says "Choose a source app inside the panel"
+// in the language the app shows.
+func SourceShortcutHint() string { return In(i18n.Locale()).SourceShortcutHint() }
+
+// SourceShortcutHint says "Choose a source app inside the panel"
+// in the language of msgs.
+func (msgs Messages) SourceShortcutHint() string {
+	return Catalog.Format(msgs.locale, "sourceShortcutHint", nil)
+}
+
+// ResetSourceShortcut says "Reset app selection shortcut"
+// in the language the app shows.
+func ResetSourceShortcut() string { return In(i18n.Locale()).ResetSourceShortcut() }
+
+// ResetSourceShortcut says "Reset app selection shortcut"
+// in the language of msgs.
+func (msgs Messages) ResetSourceShortcut() string {
+	return Catalog.Format(msgs.locale, "resetSourceShortcut", nil)
+}
+
+// SourceShortcutConflict says "App selection, panel and Stack shortcuts must be different."
+// in the language the app shows.
+func SourceShortcutConflict() string { return In(i18n.Locale()).SourceShortcutConflict() }
+
+// SourceShortcutConflict says "App selection, panel and Stack shortcuts must be different."
+// in the language of msgs.
+func (msgs Messages) SourceShortcutConflict() string {
+	return Catalog.Format(msgs.locale, "sourceShortcutConflict", nil)
+}
+
+// SourceShortcutReserved says "Choose another shortcut. This combination is used for editing or panel commands."
+// in the language the app shows.
+func SourceShortcutReserved() string { return In(i18n.Locale()).SourceShortcutReserved() }
+
+// SourceShortcutReserved says "Choose another shortcut. This combination is used for editing or panel commands."
+// in the language of msgs.
+func (msgs Messages) SourceShortcutReserved() string {
+	return Catalog.Format(msgs.locale, "sourceShortcutReserved", nil)
 }

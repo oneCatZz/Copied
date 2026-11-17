@@ -20,6 +20,8 @@ type Settings struct {
 	Shortcut string `json:"shortcut,omitempty"`
 	// StackShortcut pastes the next stack item. Empty uses the default.
 	StackShortcut string `json:"stackShortcut,omitempty"`
+	// SourceShortcut opens app selection inside the panel. Empty uses the default.
+	SourceShortcut string `json:"sourceShortcut,omitempty"`
 	// Empty follows the system; otherwise "en" or "zh-Hans".
 	Language string `json:"language,omitempty"`
 }
@@ -104,6 +106,51 @@ func shortcutSignature(acc string) string {
 
 func sameShortcut(a, b string) bool {
 	return shortcutSignature(a) == shortcutSignature(b)
+}
+
+// shortcutKeys resolves the saved accelerator to a window-local binding.
+func shortcutKeys(acc string) (ui.Modifiers, ui.Key, bool) {
+	var mods ui.Modifiers
+	key := ui.KeyUnknown
+	for _, part := range strings.Split(strings.ToLower(acc), "+") {
+		part = strings.TrimSpace(part)
+		switch part {
+		case "cmdorctrl", "commandorcontrol":
+			mods |= ui.Cmd
+		case "ctrl", "control":
+			mods |= ui.Ctrl
+		case "super", "win", "cmd", "command", "meta":
+			mods |= ui.Super
+		case "alt", "option", "altgr":
+			mods |= ui.Alt
+		case "shift":
+			mods |= ui.Shift
+		default:
+			if key != ui.KeyUnknown {
+				return 0, ui.KeyUnknown, false
+			}
+			switch part {
+			case "return":
+				part = "enter"
+			case "esc":
+				part = "escape"
+			case "del":
+				part = "delete"
+			case "ins":
+				part = "insert"
+			}
+			for candidate, name := range keyNames {
+				if strings.EqualFold(name, part) {
+					key = candidate
+					break
+				}
+			}
+			if key == ui.KeyUnknown {
+				return 0, key, false
+			}
+		}
+	}
+	return mods, key, key != ui.KeyUnknown && accelerator(mods, key) != ""
 }
 
 // keyNames are the keys a shortcut can end with, as accelerators name them.

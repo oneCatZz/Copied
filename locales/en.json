@@ -68,7 +68,7 @@
   "searchSourceApps": "Type an app name…",
   "noSourceApps": "No matching apps",
   "clearSourceApp": "Clear app filter",
-  "sourceAppShortcut": "Type @ or press Ctrl/Command+Shift+A to choose an app",
+  "sourceAppShortcut": "Type @ or press {shortcut} to choose an app",
   "sourceAppKeys": "Up/Down select · Enter confirm · Esc cancel",
   "appFilter": "App: {name}",
   "typeFilter": "Type: {name}",
@@ -109,5 +109,10 @@
   "wrapLines": "Wrap lines",
   "previewTruncated": "Preview shortened. Pasting keeps the full content.",
   "viewImage": "View larger",
-  "imageViewerHint": "Scroll or pinch to zoom · Drag to move · Double-click to fit · Space or Esc to close"
+  "imageViewerHint": "Scroll or pinch to zoom · Drag to move · Double-click to fit · Space or Esc to close",
+  "sourceShortcut": "App selection shortcut",
+  "sourceShortcutHint": "Choose a source app inside the panel",
+  "resetSourceShortcut": "Reset app selection shortcut",
+  "sourceShortcutConflict": "App selection, panel and Stack shortcuts must be different.",
+  "sourceShortcutReserved": "Choose another shortcut. This combination is used for editing or panel commands."
 }

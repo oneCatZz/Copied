@@ -62,7 +62,7 @@ func (a *app) key(mods ui.Modifiers, key ui.Key) bool {
 		return true
 	}
 	switch {
-	case mods == ui.Cmd|ui.Shift && key == ui.KeyA:
+	case a.isSourceShortcut(mods, key):
 		a.openSourcePicker("")
 	case key == ui.KeyTab && (mods == 0 || mods == ui.Shift):
 		if a.settingsOpen || a.groupDialogOpen || a.typeMenuOpen || a.groupMenuOpen || a.sourceMenuOpen || a.cardMenuID != 0 {
@@ -167,11 +167,13 @@ func (a *app) view(c *ui.Context) {
 			key  ui.Key
 		}
 		combos := []combo{
-			{ui.Cmd | ui.Shift, ui.KeyA},
 			{0, ui.KeyTab}, {ui.Shift, ui.KeyTab},
 			{0, ui.KeyUp}, {0, ui.KeyDown}, {ui.Shift, ui.KeyUp}, {ui.Shift, ui.KeyDown},
 			{0, ui.KeyEnter}, {ui.Shift, ui.KeyEnter},
 			{ui.Cmd, ui.KeyEnter}, {ui.Cmd, ui.KeyBackspace}, {ui.Cmd, ui.KeyP}, {ui.Cmd, ui.KeyS}, {ui.Cmd, ui.KeyComma},
+		}
+		if mods, key, valid := shortcutKeys(a.sourceShortcut()); valid {
+			combos = append(combos, combo{mods, key})
 		}
 		if a.query != "" || a.source != "" || len(a.picked) > 0 {
 			combos = append(combos, combo{0, ui.KeyEscape})
@@ -274,9 +276,9 @@ func (a *app) header(c *ui.Context) {
 		}
 		field.Transition(fadeMotion).Children(func() {
 			ui.Icon(c, iconSearch).FontSize(14).TextColor(t.TextMuted)
-			a.sourceFilter(c, t)
+			sourceToken := a.sourceFilter(c, t)
 			if a.sourceMenuOpen {
-				a.sourcePicker(c, t)
+				a.sourcePicker(c, t, sourceToken)
 				return
 			}
 			input := ui.TextInputBase(c.Key(searchInputKey(a.searchSession)), &a.query).Bind(&a.input).Grow(1).FontSize(13).
@@ -657,7 +659,7 @@ func (a *app) footer(c *ui.Context) {
 	})
 }
 
-// settingsDialog edits the panel and stack shortcuts and the language.
+// settingsDialog edits the panel, stack and app-selection shortcuts and language.
 func (a *app) settingsDialog(c *ui.Context) {
 	t := c.Theme()
 	tx := locales.In(c.Locale())
@@ -683,7 +685,7 @@ func (a *app) settingsDialog(c *ui.Context) {
 						ui.Text(c, title).FontSize(13).FontWeight(550)
 						ui.Text(c, hint).FontSize(11.5).TextColor(t.TextMuted)
 					})
-					a.recorder(c, stack)
+					a.recorder(c, stack, false)
 					dialogButton(c, "reset-shortcut", tx.ResetDefault(), false).Label(resetLabel).OnClick(func() {
 						if stack {
 							a.resetStackShortcut()
@@ -693,6 +695,15 @@ func (a *app) settingsDialog(c *ui.Context) {
 					})
 				})
 			}
+			ui.Row(c.Key("source-shortcut")).Gap(8).AlignItems(ui.Center).Children(func() {
+				ui.Column(c).Grow(1).Basis(0).Gap(2).Children(func() {
+					ui.Text(c, tx.SourceApps()).FontSize(13).FontWeight(550)
+					ui.Text(c, tx.SourceShortcutHint()).FontSize(11.5).TextColor(t.TextMuted)
+				})
+				a.recorder(c, false, true)
+				dialogButton(c, "reset-source-shortcut", tx.ResetDefault(), false).
+					Label(tx.ResetSourceShortcut()).OnClick(a.resetSourceShortcut)
+			})
 			if a.recordError != "" {
 				ui.Text(c, locales.Catalog.Format(c.Locale(), a.recordError, nil)).FontSize(12).TextColor(t.Danger)
 			}
@@ -715,14 +726,17 @@ func (a *app) settingsDialog(c *ui.Context) {
 }
 
 // recorder shows the shortcut, or the keys held as it waits for a new one.
-func (a *app) recorder(c *ui.Context, stack bool) {
+func (a *app) recorder(c *ui.Context, stack, source bool) {
 	t := c.Theme()
 	tx := locales.In(c.Locale())
 	label, shortcut := tx.PanelShortcut(), a.shortcut
 	if stack {
 		label, shortcut = tx.StackShortcut(), a.stackShortcut()
 	}
-	recording := a.recording && a.recordingStack == stack
+	if source {
+		label, shortcut = tx.SourceShortcut(), a.sourceShortcut()
+	}
+	recording := a.recording && a.recordingStack == stack && a.recordingSource == source
 	box := ui.Row(c.Key("recorder")).Width(210).Height(40).PaddingX(12).Gap(5).
 		Justify(ui.Center).AlignItems(ui.Center).Radius(11).Background(t.Background).
 		Cursor(ui.CursorPointer).Focusable().FocusRing(false).Label(label)
@@ -733,8 +747,8 @@ func (a *app) recorder(c *ui.Context, stack bool) {
 					return false
 				}
 				key := ev.Key
-				// Carbon registers Mac shortcuts by physical key, not input source.
-				if runtime.GOOS == "darwin" && ev.PhysicalKey != ui.KeyUnknown {
+				// Global Mac shortcuts use physical keys; the app selector is local.
+				if runtime.GOOS == "darwin" && !source && ev.PhysicalKey != ui.KeyUnknown {
 					key = ev.PhysicalKey
 				}
 				if ev.Mods == 0 && ev.Key == ui.KeyEscape {
@@ -751,6 +765,7 @@ func (a *app) recorder(c *ui.Context, stack bool) {
 		}
 		if box.Clicked() {
 			a.startRecording(stack)
+			a.recordingSource = source
 		}
 	}
 	box.Transition(fadeMotion).Children(func() {
