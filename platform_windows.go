@@ -311,3 +311,8 @@ func pasteInto(target uintptr) {
 		log.Printf("paste: SendInput sent %d/%d events: %v", n, len(inputs), err)
 	}
 }
+
+// activateForViewer and restoreFront are needed only where a pinch goes to
+// the app in front (macOS).
+func activateForViewer() {}
+func restoreFront()      {}

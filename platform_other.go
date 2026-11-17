@@ -23,3 +23,8 @@ func writeImageText(data []byte, _ string) error { return writeImage(data) }
 // pasteInto does nothing here: the clip is on the clipboard, to paste by
 // hand.
 func pasteInto(uintptr) {}
+
+// activateForViewer and restoreFront are needed only where a pinch goes to
+// the app in front (macOS).
+func activateForViewer() {}
+func restoreFront()      {}

@@ -150,6 +150,48 @@ func pasteInto(uintptr) {
 	}
 }
 
+var (
+	selRunningAppWithPID = objc.RegisterName("runningApplicationWithProcessIdentifier:")
+	selActivateWithOpts  = objc.RegisterName("activateWithOptions:")
+)
+
+// viewerFront is the app the user was in before the picture viewer brought
+// Copied to the front, or 0.
+var viewerFront int32
+
+// activateForViewer brings Copied to the front while the panel shows a
+// picture large: macOS gives the pinches of a touchpad only to the app in
+// front, and the panel never activates it of its own.
+func activateForViewer() {
+	if viewerFront != 0 {
+		return
+	}
+	// NSApp's isActive is true already while the panel has the keyboard:
+	// the app in front is what the window server says.
+	pid := frontmostPID()
+	if pid == 0 || pid == int32(os.Getpid()) {
+		return
+	}
+	viewerFront = pid
+	mygo.App.Focus()
+}
+
+// restoreFront gives the app the user was in the front back as the panel
+// hides, unless the user went to another app meanwhile.
+func restoreFront() {
+	pid := viewerFront
+	viewerFront = 0
+	if pid == 0 || frontmostPID() != int32(os.Getpid()) {
+		return
+	}
+	mygo.RunOnMain(func() {
+		app := objc.ID(objc.GetClass("NSRunningApplication")).Send(selRunningAppWithPID, pid)
+		if app != 0 {
+			app.Send(selActivateWithOpts, uint(1<<1)) // NSApplicationActivateIgnoringOtherApps
+		}
+	})
+}
+
 // frontmostPID returns the process of the app the user is in, or 0.
 func frontmostPID() int32 {
 	var pid int32

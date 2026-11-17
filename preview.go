@@ -6,6 +6,7 @@ import (
 	"log"
 	"math"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -66,8 +67,12 @@ func (a *app) previewOf(clip *Clip) *clipPreview {
 	p.id = clip.ID
 	if clip.Kind == KindImage {
 		p.loaded = true
-		a.loadOriginal(p, clip.ID)
+		store, id := a.store, clip.ID
+		a.loadOriginal(p, func() []byte { return store.Image(id) })
 		return p
+	}
+	if path := clip.imageFile(); path != "" {
+		a.loadOriginal(p, func() []byte { return readImageFile(path) })
 	}
 	if utf8.RuneCountInString(clip.Text) < previewRunes {
 		// The list's text is the whole text: Store.List cuts it at previewRunes.
@@ -116,20 +121,37 @@ func preparePreview(kind Kind, text string) previewBody {
 	return body
 }
 
-// loadOriginal decodes the whole picture of an image clip off the UI
-// thread; the preview shows its thumbnail until then. Without a window to
-// publish to, it stays with the thumbnail.
-func (a *app) loadOriginal(p *clipPreview, id int64) {
+// imageFileLimit is the largest picture file the preview reads.
+const imageFileLimit = 64 << 20
+
+// readImageFile reads a picture file for the preview, or returns nil when
+// it is gone, unreadable or too large.
+func readImageFile(path string) []byte {
+	info, err := os.Stat(path)
+	if err != nil || !info.Mode().IsRegular() || info.Size() > imageFileLimit {
+		return nil
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	return data
+}
+
+// loadOriginal decodes the whole picture of an image clip, or of a picture
+// file, off the UI thread; the preview shows an image clip's thumbnail until
+// then. Without a window to publish to, it stays with the thumbnail.
+func (a *app) loadOriginal(p *clipPreview, read func() []byte) {
 	if a.store == nil || a.panel == nil {
 		return
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	th := &thumb{cancel: cancel}
 	p.original = th
-	store, panel := a.store, a.panel
+	panel := a.panel
 	go func() {
 		defer cancel()
-		data := store.Image(id)
+		data := read()
 		if ctx.Err() != nil || len(data) == 0 {
 			return
 		}
@@ -398,7 +420,24 @@ func (a *app) previewContent(c *ui.Context, clip *Clip, p *clipPreview, hue ui.C
 			ui.Text(c, link).FontSize(12.5).LineHeight(1.6).TextColor(t.TextMuted).Selectable()
 		})
 	case KindFiles:
-		ui.Scroll(c.Key(previewKey{id: clip.ID})).Grow(1).Basis(0).Padding(12, 16).Gap(10).Children(func() {
+		original := p.original
+		picture := original != nil && original.bitmap != nil
+		if picture {
+			// A picture file shows as a picture, with its path below.
+			ui.Box(c).Grow(1).Basis(0).Padding(14, 14, 0, 14).Children(func() {
+				image := ui.Image(c.Key("preview-image"), original.bitmap).Fill().Fit(ui.ScaleDown).Radius(8).
+					Cursor(ui.CursorZoomIn)
+				if image.Clicked() {
+					p.viewing = true
+				}
+				original.releasePixels(c, image)
+			})
+		}
+		files := ui.Scroll(c.Key(previewKey{id: clip.ID}))
+		if !picture {
+			files.Grow(1).Basis(0)
+		}
+		files.Padding(12, 16).Gap(10).Children(func() {
 			for n, path := range strings.Split(text, "\n") {
 				if path = strings.TrimSpace(path); path == "" {
 					continue
@@ -597,6 +636,9 @@ func (a *app) imageViewer(c *ui.Context) {
 		}
 		ui.Text(c, hint).FontSize(11.5).TextColor(ui.RGBA(255, 255, 255, 0.78)).SingleLine()
 	})
+	if p.viewing && !v.shown {
+		activateForViewer() // for pinches to come here
+	}
 	if !p.viewing && v.shown {
 		p.view = viewer{}
 		a.input.Focus()

@@ -421,6 +421,7 @@ func (a *app) panelHidden(panel *mygo.Window) {
 	if a.panel != panel {
 		return
 	}
+	restoreFront()
 	if a.recording {
 		a.stopRecording("")
 	}

@@ -130,7 +130,16 @@ func (a *app) key(mods ui.Modifiers, key ui.Key) bool {
 // choosingImage reports whether the chosen clip is a picture, which Space
 // shows over the whole panel.
 func (a *app) choosingImage() bool {
-	return a.chosen >= 0 && a.chosen < len(a.clips) && a.clips[a.chosen].Kind == KindImage
+	if a.chosen < 0 || a.chosen >= len(a.clips) {
+		return false
+	}
+	clip := a.clips[a.chosen]
+	if clip.Kind == KindImage {
+		return true
+	}
+	// A picture file, once its preview shows it.
+	p := &a.preview
+	return clip.imageFile() != "" && p.id == clip.ID && p.original != nil && p.original.bitmap != nil
 }
 
 func (a *app) view(c *ui.Context) {

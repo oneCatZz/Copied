@@ -63,6 +63,20 @@ func (c *Clip) Files() []string {
 	return strings.Split(c.Text, "\n")
 }
 
+// imageFile returns the path of the one picture a clip of files holds, for
+// the preview to show it, or "" for anything else.
+func (c *Clip) imageFile() string {
+	files := c.Files()
+	if len(files) != 1 {
+		return ""
+	}
+	switch strings.ToLower(filepath.Ext(files[0])) {
+	case ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp":
+		return files[0]
+	}
+	return ""
+}
+
 const thumbSize = 520 // pixels, the longer side of a card's picture
 
 var colorPattern = regexp.MustCompile(`^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$`)
