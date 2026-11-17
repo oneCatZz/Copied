@@ -66,6 +66,11 @@ func openStoreAt(path string) (*Store, error) {
 			used_at INTEGER NOT NULL
 		)`,
 		`CREATE INDEX IF NOT EXISTS clips_used_at ON clips (used_at DESC)`,
+		`CREATE TABLE IF NOT EXISTS source_apps (
+			name TEXT PRIMARY KEY,
+			path TEXT NOT NULL,
+			icon BLOB
+		)`,
 		`CREATE TABLE IF NOT EXISTS history_groups (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			name TEXT NOT NULL COLLATE NOCASE UNIQUE

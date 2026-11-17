@@ -91,10 +91,11 @@ type app struct {
 	groupMembers    map[int64]*bool
 	groupSession    uint64
 
-	sourceHighlight   string
-	sourceMovePending bool
-	sourcePrefix      string
-	sourceTypedAt     time.Time
+	sourceQuery       string
+	sourceSearch      ui.Handle
+	sourceOpenPending bool
+	sourceIcons       map[string]*sourceIcon
+	sourceIconSlots   chan struct{}
 
 	filterFlow filterFlow
 	thumbSlots chan struct{} // bounds background thumbnail reads and decoding
@@ -281,7 +282,11 @@ func (a *app) watch() {
 		if skip {
 			continue
 		}
-		clip.Source = clipboardSource()
+		source, sourcePath := clipboardSource()
+		clip.Source = source
+		if err := a.store.saveSourcePath(source, sourcePath); err != nil {
+			log.Print("recording source app: ", err)
+		}
 		large := len(clip.Data) > 0
 		if err := a.store.Add(clip); err != nil {
 			log.Print("recording a clip: ", err)
@@ -362,6 +367,7 @@ func (a *app) ready() {
 	a.setUpTray()
 	mygo.App.OnWillQuit(func(*mygo.QuitEvent) {
 		a.clearThumbs()
+		a.clearSourceIcons()
 		if a.tray != nil {
 			a.tray.Destroy()
 		}
@@ -425,6 +431,7 @@ func (a *app) panelHidden(panel *mygo.Window) {
 	a.clips, a.picked = nil, nil
 	a.preview.reset()
 	a.clearThumbs()
+	a.clearSourceIcons()
 	a.cancelPanelRelease()
 	epoch := a.panelEpoch
 	a.panelIdle = time.AfterFunc(panelIdleDelay, func() {

@@ -62,6 +62,8 @@ func (a *app) key(mods ui.Modifiers, key ui.Key) bool {
 		return true
 	}
 	switch {
+	case mods == ui.Cmd|ui.Shift && key == ui.KeyA:
+		a.openSourcePicker("")
 	case key == ui.KeyTab && (mods == 0 || mods == ui.Shift):
 		if a.settingsOpen || a.groupDialogOpen || a.typeMenuOpen || a.groupMenuOpen || a.sourceMenuOpen || a.cardMenuID != 0 {
 			return false
@@ -73,6 +75,10 @@ func (a *app) key(mods ui.Modifiers, key ui.Key) bool {
 			return true
 		}
 		if a.query == "" {
+			if a.source != "" {
+				a.selectSource("")
+				return true
+			}
 			return false // left to the panel, which hides
 		}
 		a.query, a.chosen, a.scrollTo = "", 0, true
@@ -161,12 +167,13 @@ func (a *app) view(c *ui.Context) {
 			key  ui.Key
 		}
 		combos := []combo{
+			{ui.Cmd | ui.Shift, ui.KeyA},
 			{0, ui.KeyTab}, {ui.Shift, ui.KeyTab},
 			{0, ui.KeyUp}, {0, ui.KeyDown}, {ui.Shift, ui.KeyUp}, {ui.Shift, ui.KeyDown},
 			{0, ui.KeyEnter}, {ui.Shift, ui.KeyEnter},
 			{ui.Cmd, ui.KeyEnter}, {ui.Cmd, ui.KeyBackspace}, {ui.Cmd, ui.KeyP}, {ui.Cmd, ui.KeyS}, {ui.Cmd, ui.KeyComma},
 		}
-		if a.query != "" || len(a.picked) > 0 {
+		if a.query != "" || a.source != "" || len(a.picked) > 0 {
 			combos = append(combos, combo{0, ui.KeyEscape})
 		}
 		if a.query == "" && a.choosingImage() && !a.preview.viewing {
@@ -260,21 +267,36 @@ func (a *app) header(c *ui.Context) {
 		}
 		field := ui.Themed(c.Key("search"), editTheme).Row().Grow(1).Basis(0).MinWidth(0).Height(34).PaddingX(11).Gap(8).AlignItems(ui.Center).
 			Radius(10).Background(t.Surface)
-		if a.input.Focused(c) {
+		if a.input.Focused(c) || a.sourceMenuOpen {
 			field.Border(1, t.Accent).Shadow(0, 0, 0, 3, t.Accent.Alpha(0.2))
 		} else {
 			field.Border(1, t.Border)
 		}
 		field.Transition(fadeMotion).Children(func() {
 			ui.Icon(c, iconSearch).FontSize(14).TextColor(t.TextMuted)
+			a.sourceFilter(c, t)
+			if a.sourceMenuOpen {
+				a.sourcePicker(c, t)
+				return
+			}
 			input := ui.TextInputBase(c.Key(searchInputKey(a.searchSession)), &a.query).Bind(&a.input).Grow(1).FontSize(13).
 				CaretColor(t.Accent).
 				Placeholder(tx.SearchHistory()).Label(tx.Search()).
 				OnTextKey(func(k ui.TextKey) bool {
+					if k.Mods == 0 && k.Key == ui.KeyBackspace && k.Text() == "" && a.source != "" {
+						a.selectSource("")
+						return true
+					}
 					return !a.groupDialogOpen && !a.sourceMenuOpen && a.key(k.Mods, k.Key)
 				})
 			input.PopoverMenu(func(m *ui.Menu) { m.EditItems() })
 			if input.Changed() {
+				if !input.Composing() && strings.HasPrefix(a.query, "@") {
+					query := strings.TrimPrefix(a.query, "@")
+					input.ReplaceText(0, utf8.RuneCountInString(a.query), "")
+					a.openSourcePicker(query)
+					return
+				}
 				// A space typed first, over a picture, shows it rather than
 				// searching: the search field has the keys while the panel shows.
 				if a.query != "" && strings.TrimSpace(a.query) == "" && a.choosingImage() {
@@ -286,7 +308,6 @@ func (a *app) header(c *ui.Context) {
 				a.reload()
 			}
 		})
-		a.sourceFilter(c)
 		a.filters(c)
 	})
 }

@@ -27,22 +27,22 @@ const processQueryLimitedInformation = 0x1000
 
 // clipboardSource names the app that put what is on the clipboard there:
 // the one owning the clipboard, or else the one in front.
-func clipboardSource() string {
+func clipboardSource() (string, string) {
 	h, _, _ := procGetClipboardOwner.Call()
 	if h == 0 {
 		h = frontWindow()
 	}
 	if h == 0 {
-		return ""
+		return "", ""
 	}
 	var pid uint32
 	procGetWindowThreadProcessId.Call(h, uintptr(unsafe.Pointer(&pid)))
 	if pid == 0 || pid == uint32(os.Getpid()) {
-		return ""
+		return "", ""
 	}
 	path := processPath(pid)
 	if path == "" {
-		return ""
+		return "", ""
 	}
 	appNamesMu.Lock()
 	defer appNamesMu.Unlock()
@@ -54,7 +54,7 @@ func clipboardSource() string {
 		}
 		appNames[path] = name
 	}
-	return name
+	return name, path
 }
 
 // processPath returns the path of the program a process runs.

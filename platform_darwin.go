@@ -31,14 +31,16 @@ func clipboardSeq() (seq int64, ok bool) {
 func frontWindow() uintptr { return 0 }
 
 var (
-	selLocalizedName = objc.RegisterName("localizedName")
-	selUTF8String    = objc.RegisterName("UTF8String")
+	selLocalizedName   = objc.RegisterName("localizedName")
+	selUTF8String      = objc.RegisterName("UTF8String")
+	selSourceBundleURL = objc.RegisterName("bundleURL")
+	selSourcePath      = objc.RegisterName("path")
 )
 
 // clipboardSource names the app in front, as the user copies in it as a
 // rule: macOS does not record which app wrote the clipboard.
-func clipboardSource() string {
-	var name string
+func clipboardSource() (string, string) {
+	var name, path string
 	mygo.RunOnMain(func() {
 		app := objc.ID(objc.GetClass("NSWorkspace")).Send(selSharedWorkspace).Send(selFrontmostApp)
 		if app == 0 || int32(app.Send(selProcessIdentifier)) == int32(os.Getpid()) {
@@ -47,8 +49,13 @@ func clipboardSource() string {
 		if s := app.Send(selLocalizedName); s != 0 {
 			name = objc.Send[string](s, selUTF8String)
 		}
+		if url := app.Send(selSourceBundleURL); url != 0 {
+			if s := url.Send(selSourcePath); s != 0 {
+				path = objc.Send[string](s, selUTF8String)
+			}
+		}
 	})
-	return name
+	return name, path
 }
 
 func writeImage(data []byte) error { return mygo.Clipboard.WriteImage(data) }

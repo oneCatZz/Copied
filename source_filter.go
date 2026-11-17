@@ -1,140 +1,151 @@
 package main
 
 import (
-	"slices"
 	"strings"
-	"time"
 
 	"copied/locales"
 
 	"github.com/egoist/mygo/ui"
 )
 
-var sourceAppIcon = svg(`<rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8m-4-4v4"/>`)
+var sourceCloseIcon = svg(`<path d="m6 6 12 12M18 6 6 18"/>`)
 
-func (a *app) sourceFilter(c *ui.Context) {
-	t, tx := c.Theme(), locales.In(c.Locale())
+// sourceFilter is a token inside the search field, before its text input.
+func (a *app) sourceFilter(c *ui.Context, t *ui.Theme) {
+	tx := locales.In(c.Locale())
+	width, _ := c.Size()
 	if !a.sourceMenuOpen {
-		a.sourcePrefix = ""
-		a.sourceMovePending = false
+		a.sourceSearch.CancelFocus(c)
 	}
-	name := a.source
-	if name == "" {
-		name = tx.All()
-	}
-	sel := ui.SelectBaseOpen(c.Key(headerMenuKey{a.searchSession, "source"}), &a.source, &a.sourceMenuOpen)
-	trigger := sel.Trigger.Row().Width(148).Height(34).Shrink(0).PaddingX(8).Gap(5).
-		AlignItems(ui.Center).Radius(10).Border(1, t.Border).Background(t.Surface).
-		Cursor(ui.CursorPointer).Label(tx.SourceApps()).Value(name).
-		HandleInput(func(ev ui.InputEvent) bool { return a.sourceFilterInput(ev, tx.All()) }).
-		OnChange(func() { a.selectSource(a.source) })
-	if a.sourceMenuOpen || trigger.Hovered() || trigger.FocusVisible() {
-		trigger.Border(1, t.Accent.Alpha(0.4)).Background(t.Accent.Alpha(0.05))
-	}
-	if !c.Preferences().ReduceMotion {
-		trigger.Transition(fadeMotion)
-	}
-	trigger.Children(func() {
-		ui.Icon(c, sourceAppIcon).FontSize(14).Shrink(0).TextColor(t.Accent)
-		ui.Text(c, tx.AppFilter(name)).FontSize(11.5).FontWeight(550).TextColor(t.Text).SingleLine().Grow(1)
-		ui.Icon(c, iconChevron).FontSize(10).Shrink(0).TextColor(t.TextMuted)
-	})
-	if a.sourceMovePending {
-		sel.Highlight(a.sourceHighlight)
-		a.sourceMovePending = false
-	}
-	width, height := c.Size()
-	sel.Popup(func(panel ui.Element) {
-		popupSurface(c, panel).Width(min(float32(360), width-44)).Padding(10).Radius(14).Margin(7, 0, 0, 0).Gap(8)
-		ui.Text(c, tx.SourceApps()).FontSize(10.5).FontWeight(550).TextColor(t.TextMuted).Padding(2, 4)
-		listHeight := min(float32((len(a.sources)+1)*40-4), max(float32(36), min(float32(320), height-180)))
-		ui.Scroll(c.Key("source-options")).Height(listHeight).Gap(4).Children(func() {
-			for _, source := range append([]string{""}, a.sources...) {
-				label := source
-				icon := sourceAppIcon
-				if source == "" {
-					label, icon = tx.All(), filterAllIcon
-				}
-				item := sel.Item(source).Height(36).Shrink(0).PaddingX(9).Gap(8).AlignItems(ui.Center).
-					Radius(10).Cursor(ui.CursorPointer).Label(label).Description(label).Border(1, ui.Transparent)
-				if item.Highlighted() {
-					a.sourceHighlight = source
-					item.Background(t.SurfaceHover).Border(1, t.Border.Alpha(0.7))
-				}
-				selected := a.source == source
-				text := t.Text
-				if selected {
-					item.Gradient(t.Accent.Alpha(0.12), t.Accent.Alpha(0.04), 135).Border(1, t.Accent.Alpha(0.3))
-					text = t.Accent
-				}
-				item.Children(func() {
-					ui.Box(c).Size(24, 24).Shrink(0).Center().Radius(7).Background(t.Accent.Alpha(0.11)).Children(func() {
-						ui.Icon(c, icon).FontSize(14).TextColor(t.Accent)
-					})
-					ui.Text(c, label).FontSize(12).FontWeight(550).TextColor(text).SingleLine().Grow(1)
-					if selected {
-						ui.Icon(c, filterCheckIcon).FontSize(12).Shrink(0).TextColor(t.Accent)
+	ui.Row(c.Key("source-token")).Height(26).Shrink(0).Gap(2).PaddingX(4).
+		Radius(7).Background(t.Accent.Alpha(0.09)).Border(1, t.Accent.Alpha(0.22)).Children(func() {
+			trigger := ui.ButtonBase(c.Key(headerMenuKey{a.searchSession, "source"})).Height(24).PaddingX(3).Gap(5).
+				MaxWidth(min(float32(220), width*0.3)).AlignItems(ui.Center).Cursor(ui.CursorPointer).
+				Label(tx.SourceApps()).Description(tx.SourceAppShortcut()).
+				OnClick(func() {
+					if a.sourceMenuOpen {
+						a.sourceMenuOpen = false
+						a.input.Focus()
+					} else {
+						a.openSourcePicker("")
 					}
 				})
+			trigger.Children(func() {
+				if a.source == "" {
+					ui.Text(c, "@").FontSize(13).FontWeight(600).TextColor(t.Accent)
+					ui.Text(c, tx.Apps()).FontSize(12).TextColor(t.Accent).SingleLine()
+					ui.Icon(c, iconChevron).FontSize(10).TextColor(t.Accent)
+				} else {
+					a.sourceIconView(c, a.source, 16, t)
+					ui.Text(c, a.source).FontSize(12).FontWeight(550).TextColor(t.Accent).SingleLine().Grow(1).MinWidth(0)
+				}
+			})
+			if a.source != "" {
+				ui.ButtonBase(c.Key("clear-source")).Size(18, 20).Center().Radius(5).Cursor(ui.CursorPointer).
+					Label(tx.ClearSourceApp()).OnClick(func() { a.selectSource("") }).Children(func() {
+						ui.Icon(c, sourceCloseIcon).FontSize(10).TextColor(t.Accent)
+					})
 			}
 		})
-	})
 }
 
-// sourceFilterInput keeps type-ahead local to the selector. Only values and
-// pending state survive the event; SelectParts are used in the next build.
-func (a *app) sourceFilterInput(ev ui.InputEvent, all string) bool {
-	if !a.sourceMenuOpen || ev.Kind != ui.InputKeyDown || ev.Mods&^ui.Shift != 0 {
-		return false
-	}
-	var letter rune
-	switch {
-	case ev.Key >= ui.KeyA && ev.Key <= ui.KeyZ:
-		letter = 'a' + rune(ev.Key-ui.KeyA)
-	case ev.Key >= ui.Key0 && ev.Key <= ui.Key9:
-		letter = '0' + rune(ev.Key-ui.Key0)
-	default:
-		return false
-	}
-	options := append([]string{""}, a.sources...)
-	current := max(0, slices.Index(options, a.sourceHighlight))
-	find := func(prefix string, start int) (string, bool) {
-		for step := range len(options) {
-			source := options[(start+step)%len(options)]
-			label := source
-			if source == "" {
-				label = all
+// sourcePicker uses a real text input. Composition, candidate confirmation
+// and navigation belong to the combobox, including when an IME is active.
+func (a *app) sourcePicker(c *ui.Context, t *ui.Theme) {
+	tx := locales.In(c.Locale())
+	cb := ui.ComboboxBase(c.Key(headerMenuKey{a.searchSession, "source-input"}), &a.sourceQuery)
+	cb.Input.Bind(&a.sourceSearch).Grow(1).MinWidth(0).FontSize(13).CaretColor(t.Accent).
+		Placeholder(tx.SearchSourceApps()).Label(tx.SourceApps()).AutoComplete(ui.AutoCompleteList).
+		OnTextKey(func(k ui.TextKey) bool {
+			if k.Mods == ui.Cmd|ui.Shift && k.Key == ui.KeyA {
+				a.sourceMenuOpen = false
+				a.input.Focus()
+				return true
 			}
-			if strings.HasPrefix(strings.ToLower(label), prefix) {
-				return source, true
-			}
+			return false
+		})
+	if a.sourceOpenPending {
+		cb.SetOpen(true)
+		a.sourceOpenPending = false
+	}
+	width, height := c.Size()
+	cb.Popup(func(panel ui.Element) {
+		popupSurface(c, panel).MinWidth(0).Width(min(float32(380), width-44)).Padding(10).Radius(14).Margin(8, 0, 0, 0).Gap(8)
+		ui.Text(c, tx.SourceApps()).FontSize(10.5).FontWeight(550).TextColor(t.TextMuted).Padding(2, 4)
+		options := a.matchingSources(a.sourceQuery, tx.All())
+		listHeight := min(float32(len(options)*40-4), max(float32(36), min(float32(320), height-190)))
+		if len(options) == 0 {
+			ui.Text(c, tx.NoSourceApps()).FontSize(12).TextColor(t.TextMuted).Padding(10)
+		} else {
+			ui.Scroll(c.Key("source-options")).Height(listHeight).Gap(4).Children(func() {
+				for _, source := range options {
+					label := source
+					if source == "" {
+						label = tx.All()
+					}
+					item := cb.Item(source).Height(36).Shrink(0).PaddingX(9).Gap(8).AlignItems(ui.Center).
+						Radius(10).Cursor(ui.CursorPointer).Label(label).Description(label).Border(1, ui.Transparent)
+					if item.Highlighted() {
+						item.Background(t.SurfaceHover).Border(1, t.Border.Alpha(0.7))
+					}
+					selected := a.source == source
+					text := t.Text
+					if selected {
+						item.Gradient(t.Accent.Alpha(0.12), t.Accent.Alpha(0.04), 135).Border(1, t.Accent.Alpha(0.3))
+						text = t.Accent
+					}
+					item.Children(func() {
+						a.sourceIconView(c, source, 24, t)
+						ui.Text(c, label).FontSize(12).FontWeight(550).TextColor(text).SingleLine().Grow(1)
+						if selected {
+							ui.Icon(c, filterCheckIcon).FontSize(12).Shrink(0).TextColor(t.Accent)
+						}
+					})
+				}
+			})
 		}
-		return "", false
+		ui.Text(c, tx.SourceAppKeys()).FontSize(10.5).TextColor(t.TextMuted).Padding(2, 4)
+	})
+	if source, chosen := cb.Chosen(); chosen {
+		a.selectSource(source)
+	} else if !cb.Open() {
+		a.sourceMenuOpen = false
+		if a.sourceSearch.Focused(c) {
+			a.input.Focus()
+		}
 	}
-	prefix, start := string(letter), current+1
-	if a.sourcePrefix != "" && a.sourcePrefix != prefix && ev.Time.Sub(a.sourceTypedAt) < 750*time.Millisecond {
-		prefix, start = a.sourcePrefix+prefix, current
+}
+
+func (a *app) matchingSources(query, all string) []string {
+	q := strings.ToLower(strings.TrimSpace(query))
+	var starts, contains []string
+	for _, source := range append([]string{""}, a.sources...) {
+		label := source
+		if label == "" {
+			label = all
+		}
+		label = strings.ToLower(label)
+		if strings.HasPrefix(label, q) {
+			starts = append(starts, source)
+		} else if strings.Contains(label, q) {
+			contains = append(contains, source)
+		}
 	}
-	match, found := find(prefix, start)
-	if !found {
-		// A different initial starts a new search immediately rather than
-		// making the user wait for the previous prefix to expire.
-		prefix = string(letter)
-		match, found = find(prefix, current+1)
-	}
-	a.sourcePrefix, a.sourceTypedAt = prefix, ev.Time
-	if found {
-		a.sourceHighlight, a.sourceMovePending = match, true
-	} else {
-		a.sourcePrefix = ""
-	}
-	return true
+	return append(starts, contains...)
+}
+
+func (a *app) openSourcePicker(query string) {
+	a.cardMenuID, a.typeMenuOpen, a.groupMenuOpen = 0, false, false
+	a.sourceQuery = query
+	a.sourceMenuOpen, a.sourceOpenPending = true, true
+	a.sourceSearch.Focus()
 }
 
 func (a *app) selectSource(source string) {
 	a.source, a.chosen, a.scrollTo = source, 0, true
 	a.cardMenuID, a.typeMenuOpen, a.groupMenuOpen = 0, false, false
-	a.sourceMenuOpen = false
+	a.sourceMenuOpen, a.sourceOpenPending = false, false
+	a.sourceQuery = ""
 	a.reload()
 	a.input.Focus()
 }

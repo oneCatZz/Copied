@@ -144,11 +144,11 @@ func (msgs Messages) ClipboardTypes() string {
 	return Catalog.Format(msgs.locale, "clipboardTypes", nil)
 }
 
-// SearchHistory says "Search content or source app"
+// SearchHistory says "Search content, or type @ to choose an app"
 // in the language the app shows.
 func SearchHistory() string { return In(i18n.Locale()).SearchHistory() }
 
-// SearchHistory says "Search content or source app"
+// SearchHistory says "Search content, or type @ to choose an app"
 // in the language of msgs.
 func (msgs Messages) SearchHistory() string {
 	return Catalog.Format(msgs.locale, "searchHistory", nil)
@@ -672,6 +672,66 @@ func SourceApps() string { return In(i18n.Locale()).SourceApps() }
 // in the language of msgs.
 func (msgs Messages) SourceApps() string {
 	return Catalog.Format(msgs.locale, "sourceApps", nil)
+}
+
+// Apps says "Apps"
+// in the language the app shows.
+func Apps() string { return In(i18n.Locale()).Apps() }
+
+// Apps says "Apps"
+// in the language of msgs.
+func (msgs Messages) Apps() string {
+	return Catalog.Format(msgs.locale, "apps", nil)
+}
+
+// SearchSourceApps says "Type an app name…"
+// in the language the app shows.
+func SearchSourceApps() string { return In(i18n.Locale()).SearchSourceApps() }
+
+// SearchSourceApps says "Type an app name…"
+// in the language of msgs.
+func (msgs Messages) SearchSourceApps() string {
+	return Catalog.Format(msgs.locale, "searchSourceApps", nil)
+}
+
+// NoSourceApps says "No matching apps"
+// in the language the app shows.
+func NoSourceApps() string { return In(i18n.Locale()).NoSourceApps() }
+
+// NoSourceApps says "No matching apps"
+// in the language of msgs.
+func (msgs Messages) NoSourceApps() string {
+	return Catalog.Format(msgs.locale, "noSourceApps", nil)
+}
+
+// ClearSourceApp says "Clear app filter"
+// in the language the app shows.
+func ClearSourceApp() string { return In(i18n.Locale()).ClearSourceApp() }
+
+// ClearSourceApp says "Clear app filter"
+// in the language of msgs.
+func (msgs Messages) ClearSourceApp() string {
+	return Catalog.Format(msgs.locale, "clearSourceApp", nil)
+}
+
+// SourceAppShortcut says "Type @ or press Ctrl/Command+Shift+A to choose an app"
+// in the language the app shows.
+func SourceAppShortcut() string { return In(i18n.Locale()).SourceAppShortcut() }
+
+// SourceAppShortcut says "Type @ or press Ctrl/Command+Shift+A to choose an app"
+// in the language of msgs.
+func (msgs Messages) SourceAppShortcut() string {
+	return Catalog.Format(msgs.locale, "sourceAppShortcut", nil)
+}
+
+// SourceAppKeys says "Up/Down select · Enter confirm · Esc cancel"
+// in the language the app shows.
+func SourceAppKeys() string { return In(i18n.Locale()).SourceAppKeys() }
+
+// SourceAppKeys says "Up/Down select · Enter confirm · Esc cancel"
+// in the language of msgs.
+func (msgs Messages) SourceAppKeys() string {
+	return Catalog.Format(msgs.locale, "sourceAppKeys", nil)
 }
 
 // AppFilter says "App: {name}"
