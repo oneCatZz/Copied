@@ -89,6 +89,9 @@ func (a *app) pickThrough(from, to int) {
 		a.pick(i)
 	}
 	a.pick(to)
+	if len(a.picked) == 1 {
+		a.picked, a.pickRange = nil, nil
+	}
 }
 
 // pick adds card i to the batch, unless it is there already.
