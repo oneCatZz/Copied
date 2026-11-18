@@ -98,45 +98,66 @@ func (a *app) pasteNext() {
 		id := a.stack[0]
 		a.stack = a.stack[1:]
 		if a.store.Has(id) {
-			a.queueStackPaste(stackPaste{id: id, target: target})
+			write := func() bool { return a.copyClip(id, false) }
+			a.queuePaste(pasteRequest{target: target, writes: []func() bool{write}})
 			break
 		}
 	}
 	a.syncStackShortcut()
 }
 
-// stackPasteGap lets the app read a clip from the clipboard before the next
-// clip of the stack replaces it.
-const stackPasteGap = 150 * time.Millisecond
+// pasteGap lets the target app read the clipboard before the next write.
+const pasteGap = 150 * time.Millisecond
 
-// stackPaste is a clip of the stack on its way to the app the user is in.
-type stackPaste struct {
-	id     int64
+type pasteRequest struct {
 	target uintptr
+	writes []func() bool
+	panel  *mygo.Window // when set, the panel hides after the first successful write
+	epoch  uint64       // cancel a queued request if its panel session ended
 }
 
-// queueStackPaste pastes the clips of the stack one at a time, however fast
-// the shortcut is pressed: each takes the clipboard only once the last one
-// was pasted.
-func (a *app) queueStackPaste(p stackPaste) {
-	if a.stackPastes == nil {
-		a.stackPastes = make(chan stackPaste, 64)
+// queuePaste serializes clipboard writes and paste events from the panel and
+// the stack. The clipboard and panel callbacks run on the main thread.
+func (a *app) queuePaste(p pasteRequest) {
+	if a.pasteQueue == nil {
+		a.pasteQueue = make(chan pasteRequest, 64)
+		queue := a.pasteQueue
 		go func() {
-			for p := range a.stackPastes {
-				var ok bool
-				mygo.RunOnMain(func() { ok = a.copyClip(p.id, false) })
-				if !ok {
-					continue
-				}
-				pasteInto(p.target)
-				time.Sleep(stackPasteGap)
+			for p := range queue {
+				a.runPaste(p)
 			}
 		}()
 	}
 	select {
-	case a.stackPastes <- p:
+	case a.pasteQueue <- p:
 	default: // never block the main thread, which the paster waits on
-		log.Print("stack: too many pastes queued")
+		log.Print("paste: too many pastes queued")
+	}
+}
+
+func (a *app) runPaste(p pasteRequest) {
+	started := false
+	for _, write := range p.writes {
+		var ok, canceled bool
+		mygo.RunOnMain(func() {
+			if a.quitting || (started && p.target != 0 && frontWindow() != p.target) ||
+				(!started && p.panel != nil && p.epoch != a.panelEpoch) {
+				canceled = true
+				return
+			}
+			ok = write()
+			if ok && !started && p.panel != nil {
+				p.panel.Hide()
+			}
+		})
+		if canceled {
+			return
+		}
+		if ok {
+			started = true
+			pasteInto(p.target)
+			time.Sleep(pasteGap)
+		}
 	}
 }
 

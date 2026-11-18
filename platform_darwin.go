@@ -25,10 +25,9 @@ func clipboardSeq() (seq int64, ok bool) {
 	return int64(pasteboard.Send(selChangeCount)), true
 }
 
-// frontWindow is nothing on macOS: the panel takes the keyboard without
-// activating the app, and the app the user was in has it back as the panel
-// hides.
-func frontWindow() uintptr { return 0 }
+// frontWindow uses the active app's process on macOS. The panel takes the
+// keyboard without activating the app.
+func frontWindow() uintptr { return uintptr(frontmostPID()) }
 
 var (
 	selLocalizedName   = objc.RegisterName("localizedName")
@@ -102,7 +101,7 @@ var (
 // take on the modifiers the user holds: Option still held from the stack's
 // shortcut would make Command+Option+V. While one is held, they go to the
 // frontmost app itself instead.
-func pasteInto(uintptr) {
+func pasteInto(target uintptr) {
 	loadEvents.Do(func() {
 		cg, err := purego.Dlopen(coreGraphicsLibrary, purego.RTLD_LAZY|purego.RTLD_GLOBAL)
 		if err != nil {
@@ -125,23 +124,23 @@ func pasteInto(uintptr) {
 		return
 	}
 	time.Sleep(80 * time.Millisecond) // until the app has the keyboard back
+	pid := frontmostPID()
+	if target != 0 && uintptr(pid) != target {
+		return
+	}
 	source := cgEventSourceCreate(eventStatePrivate)
 	if source == 0 {
 		return
 	}
 	defer cfRelease(source)
-	var pid int32
 	held := cgEventSourceFlags(eventStateHID)
-	if held&eventFlagsHeld != 0 {
-		pid = frontmostPID()
-	}
 	for _, down := range []bool{true, false} {
 		event := cgEventCreateKeyboard(source, keyCodeV, down)
 		if event == 0 {
 			return
 		}
 		cgEventSetFlags(event, eventFlagMaskCmd)
-		if pid > 0 {
+		if pid > 0 && held&eventFlagsHeld != 0 {
 			cgEventPostToPid(pid, event)
 		} else {
 			cgEventPost(eventTapSession, event)

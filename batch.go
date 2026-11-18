@@ -32,6 +32,9 @@ func (a *app) clickCard(i int, mods ui.Modifiers) {
 	if i < 0 || i >= len(a.clips) {
 		return
 	}
+	if mods != ui.Shift {
+		a.pickRange = nil
+	}
 	switch mods {
 	case ui.Cmd:
 		if len(a.picked) == 0 && i != a.chosen {
@@ -48,22 +51,44 @@ func (a *app) clickCard(i int, mods ui.Modifiers) {
 			a.picked = append(a.picked, id)
 		}
 	case ui.Shift:
-		from, to := min(a.chosen, i), max(a.chosen, i)
-		for j := from; j <= to; j++ {
-			a.pick(j)
-		}
+		a.pickThrough(a.chosen, i)
 	default:
 		a.picked = nil
 	}
 	a.chosen = max(0, i)
 }
 
-// extendPick moves the chosen card by step and picks it, with the one it
-// left, as Shift and an arrow do.
+type pickRange struct {
+	anchor int
+	tip    int
+	base   []int64 // the picks made before starting this range
+}
+
+// extendPick moves the end of the range, leaving its starting card in place.
 func (a *app) extendPick(step int) {
-	a.pick(a.chosen)
-	a.choose(a.chosen + step)
-	a.pick(a.chosen)
+	from := a.chosen
+	a.choose(from + step)
+	if a.chosen != from {
+		a.pickThrough(from, a.chosen)
+	}
+}
+
+func (a *app) pickThrough(from, to int) {
+	r := a.pickRange
+	if r == nil || r.tip != from || len(a.picked) == 0 {
+		r = &pickRange{anchor: from, base: slices.Clone(a.picked)}
+		a.pickRange = r
+	}
+	r.tip = to
+	a.picked = append(a.picked[:0], r.base...)
+	step := 1
+	if to < r.anchor {
+		step = -1
+	}
+	for i := r.anchor; i != to; i += step {
+		a.pick(i)
+	}
+	a.pick(to)
 }
 
 // pick adds card i to the batch, unless it is there already.
@@ -71,6 +96,41 @@ func (a *app) pick(i int) {
 	if i >= 0 && i < len(a.clips) && a.pickOrder(a.clips[i].ID) == 0 {
 		a.picked = append(a.picked, a.clips[i].ID)
 	}
+}
+
+// batchPasteWrites keeps text together and sends native clipboard data for
+// attachments in selection order. Each image needs its own paste event.
+func (a *app) batchPasteWrites(ids []int64, target uintptr, plain bool) []func() bool {
+	kinds := make(map[int64]Kind, len(a.clips))
+	for _, clip := range a.clips {
+		kinds[clip.ID] = clip.Kind
+	}
+	var texts, files []int64
+	writes := make([]func() bool, 0, len(ids))
+	writeText := func() bool { return a.copyBatch(texts, plain) }
+	flushFiles := func() {
+		if len(files) > 0 {
+			group := files
+			writes = append(writes, func() bool { return a.copyBatch(group, plain) })
+			files = nil
+		}
+	}
+	for _, id := range ids {
+		switch kinds[id] {
+		case KindImage:
+			flushFiles()
+			writes = append(writes, func() bool { return a.copyForPaste(id, KindImage, target, plain) })
+		case KindFiles:
+			files = append(files, id)
+		default:
+			texts = append(texts, id)
+		}
+	}
+	flushFiles()
+	if len(texts) > 0 {
+		return slices.Insert(writes, 0, writeText)
+	}
+	return writes
 }
 
 // copyBatch puts the clips with IDs on the clipboard as one, in turn, and
@@ -103,7 +163,7 @@ func (a *app) copyBatch(ids []int64, plain bool) bool {
 	return true
 }
 
-// mergeClips makes one clip of several, to paste them at once: the paths
+// mergeClips makes one clip of several, to copy them at once: the paths
 // of files when all of them are files, or else their texts one per line,
 // the paths of files among them. Pictures cannot join a text and are left
 // out; it returns nil when nothing remains.

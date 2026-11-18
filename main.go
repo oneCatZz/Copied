@@ -70,6 +70,7 @@ type app struct {
 	sources       []string
 	chosen        int
 	picked        []int64 // clips picked to paste together, in the order picked
+	pickRange     *pickRange
 	scrollTo      bool    // the chosen card scrolls into view in the next frame
 	input         ui.Handle
 	thumbs        map[int64]*thumb // the pictures of the image clips in view, by clip
@@ -107,7 +108,7 @@ type app struct {
 	stackKeys string           // the stack accelerator currently registered
 	shortcuts shortcutRegistry // nil uses the native global shortcut registry
 
-	stackPastes chan stackPaste // pastes of the stack, in turn (queueStackPaste)
+	pasteQueue chan pasteRequest // panel and stack pastes share the clipboard
 
 	listScroll ui.ScrollState
 	preview    clipPreview // the whole text of the chosen clip, as it loads
@@ -145,6 +146,7 @@ func (a *app) reload() {
 	}
 	a.clips = clips
 	a.chosen = max(0, min(a.chosen, len(clips)-1))
+	a.pickRange = nil
 	listed := make(map[int64]bool, len(clips))
 	for _, c := range clips {
 		listed[c.ID] = true
@@ -207,15 +209,27 @@ func (a *app) copyClip(id int64, plain bool) bool {
 	return true
 }
 
-// paste copies a clip, hides the panel and pastes into the app the user
-// was in.
+// paste queues a single clip or a batch for the app the user was in.
 func (a *app) paste(i int, plain bool) {
-	target := a.target
-	if !a.copyImagePath(i, target, plain) && !a.copy(i, plain) {
+	if i < 0 || i >= len(a.clips) {
 		return
 	}
-	a.panel.Hide()
-	go pasteInto(target)
+	target := a.target
+	var writes []func() bool
+	if ids := a.batchIDs(i); ids != nil {
+		writes = a.batchPasteWrites(ids, target, plain)
+	} else {
+		id, kind := a.clips[i].ID, a.clips[i].Kind
+		writes = []func() bool{func() bool { return a.copyForPaste(id, kind, target, plain) }}
+	}
+	a.queuePaste(pasteRequest{target: target, writes: writes, panel: a.panel, epoch: a.panelEpoch})
+}
+
+func (a *app) copyForPaste(id int64, kind Kind, target uintptr, plain bool) bool {
+	if kind == KindImage && (plain || terminalWindow(target)) && a.copyImagePath(id, plain) {
+		return true
+	}
+	return a.copyClip(id, plain)
 }
 
 // copyOnly copies a clip and hides the panel, to paste by hand.

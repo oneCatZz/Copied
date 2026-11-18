@@ -15,16 +15,8 @@ const imageFileAge = 24 * time.Hour
 // copyImagePath puts a picture to paste into a terminal, or as plain text
 // anywhere, on the clipboard together with the path of a file holding it.
 // A terminal pastes only text, and Claude Code and Codex take the path of a
-// picture pasted into them for the picture. It reports false for anything
-// else, to be copied as usual.
-func (a *app) copyImagePath(i int, target uintptr, plain bool) bool {
-	if i < 0 || i >= len(a.clips) || a.clips[i].Kind != KindImage || a.batchIDs(i) != nil {
-		return false
-	}
-	if !plain && !terminalWindow(target) {
-		return false
-	}
-	id := a.clips[i].ID
+// picture pasted into them for the picture.
+func (a *app) copyImagePath(id int64, plain bool) bool {
 	clip, err := a.store.Get(id)
 	if err != nil || clip == nil {
 		log.Print("reading clip: ", err)
