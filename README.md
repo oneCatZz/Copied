@@ -6,6 +6,10 @@ Windows 和 macOS 上的剪贴板历史工具，功能参考 [Paste](https://pas
 
 基于 [MyGo](https://github.com/egoist/mygo) 的原生 UI 开发：纯 Go，界面由框架在 GPU 上绘制，不使用 WebView。目前只有本地功能，没有网络同步。
 
+<img src="docs/screenshots/panel.png" alt="Copied 主面板：左侧历史列表，右侧为选中代码的预览" width="720">
+
+*主面板（Windows）：左侧历史列表，右侧预览选中的 JSON 代码。*
+
 ## macOS 安装
 
 推荐在终端用一行命令安装，无需在系统设置中手动放行：
@@ -64,6 +68,10 @@ Copied 启动 30 秒后检查一次 GitHub Releases，之后每 6 小时检查�
 
 全局快捷键默认是 `Ctrl+Shift+V`（macOS 为 `⌘⇧V`）。如果被其他程序占用，会依次尝试 `Alt+Shift+V`、`Ctrl+Alt+Shift+V`。可以在面板右上角的设置按钮、`Ctrl/⌘ + ,` 或托盘菜单的“设置”里修改。
 
+<img src="docs/screenshots/settings.png" alt="设置对话框：快捷键、语言与版本更新" width="720">
+
+*设置对话框（Windows）：底部显示当前版本与更新状态，可手动检查更新。*
+
 面板内的按键：
 
 | 按键 | 作用 |
@@ -108,6 +116,8 @@ Stack 非空时，默认用 `Ctrl+Alt+V`（macOS 为 `⌘⌥V`）在任意应用
 
 Windows 和 macOS 点击或右键托盘图标打开分组弹层，顶部显示“记录中”或“已暂停”。
 
+<img src="docs/screenshots/tray.png" alt="托盘弹层" width="252">
+
 | 操作 | 说明 |
 |---|---|
 | 打开面板 | 呼出剪贴板历史，右侧显示当前全局快捷键 |
@@ -115,6 +125,7 @@ Windows 和 macOS 点击或右键托盘图标打开分组弹层，顶部显示�
 | 剪贴板记录 | 暂停或恢复记录，已有历史保留 |
 | 开机启动 | 设置是否在当前用户登录时后台运行 |
 | 清空历史 | 删除未分组的条目，保留所有分组内容 |
+| 检查更新 | 右侧显示当前版本，点按立即检查；新版本下载完成后变为“重启以更新到 x.y.z”并移到顶部 |
 | 退出 Copied | 退出程序并停止记录 |
 
 点击外部、按 `Esc` 或再次点击托盘图标关闭弹层；切换开关时弹层保持打开。支持键盘上下方向键导航。
