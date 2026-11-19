@@ -8,9 +8,17 @@ Windows 和 macOS 上的剪贴板历史工具，功能参考 [Paste](https://pas
 
 ## macOS 安装
 
-当前 macOS 构建**没有 Apple Developer ID 开发者签名，也未经过 Apple 公证**，首次打开需要在系统设置中手动允许。
+推荐在终端用一行命令安装，无需在系统设置中手动放行：
 
-1. 在本仓库的 [Actions](https://github.com/oneCatZz/Copied/actions/workflows/build.yml) 中，打开一次 **macOS Universal** 打包成功的运行，下载 `Copied-macos-universal` 构建产物并解压，找到 `.dmg` 文件。此版本同时支持 Apple Silicon 和 Intel Mac。
+```sh
+curl -fsSL https://github.com/oneCatZz/Copied/releases/latest/download/install.sh | sh
+```
+
+脚本下载最新 Release 中的应用，校验更新签名后安装到“应用程序”（没有写入权限时为 `~/Applications`）并打开。`curl` 下载的文件不带隔离属性，Gatekeeper 不会拦截。以后可用 `sh install.sh --uninstall` 卸载，设置与历史保留。
+
+也可以手动安装 DMG。当前 macOS 构建**没有 Apple Developer ID 开发者签名，也未经过 Apple 公证**，浏览器下载的 DMG 首次打开需要在系统设置中手动允许。
+
+1. 在本仓库的 [Releases](https://github.com/oneCatZz/Copied/releases) 中下载最新版本的 `.dmg`。此版本同时支持 Apple Silicon 和 Intel Mac。
 2. 打开 DMG，将 `Copied.app` 拖入“应用程序”（Applications），再从“应用程序”中双击打开 Copied。
 3. 如果 macOS 提示无法验证开发者或无法检查 App 是否包含恶意软件，在确认下载自本仓库后，打开“系统设置 → 隐私与安全性”，向下滚动到“安全性”，找到 Copied 的拦截提示，点按“仍要打开”（Open Anyway），按系统提示验证并确认“打开”。如果没有显示此按钮，先再次尝试打开 Copied，再返回该设置页面。
 4. 如需自动粘贴，在“系统设置 → 隐私与安全性 → 辅助功能”中允许 Copied；未授权时仍可复制历史记录，再手动按 `⌘V` 粘贴。
@@ -20,6 +28,16 @@ Windows 和 macOS 上的剪贴板历史工具，功能参考 [Paste](https://pas
 macOS 构建使用固定的自签名证书“Copied Code Signing”签名，升级到新版本后“辅助功能”授权仍然有效，无需重新添加。从使用此证书之前的旧版本升级时，需要在“辅助功能”列表中删除 Copied 后重新添加一次；如果开关显示已开启但无法自动粘贴，也按此处理。
 
 维护者：证书以 `.p12` 的 base64 存放在仓库 Secrets `MACOS_CERTIFICATE_P12`、`MACOS_CERTIFICATE_PASSWORD` 中，CI 打包时由 `scripts/import-signing-certificate.sh` 导入临时钥匙串；没有这两个 Secret 时（如来自 fork 的 PR）回退为 ad-hoc 签名。本地打包使用同一证书：`go tool mygo build -platform darwin/universal -sign "Copied Code Signing"`。
+
+## 自动更新
+
+Copied 启动 30 秒后检查一次 GitHub Releases，之后每 6 小时检查一次。发现新版本时在后台下载、校验签名并暂存，不打断使用：
+
+- 托盘弹层顶部出现“重启以完成更新”，点按后在后台重启到新版本。
+- 不点也会自动完成：面板和托盘弹层关闭满 5 分钟、2 分钟内没有新的复制、Stack 为空且没有暂停记录时，Copied 在后台重启到新版本，不弹出面板。Stack 只保存在内存中、暂停状态重启后会恢复为记录中，因此这两种情况下会等待。
+- 正常退出后再打开，也直接是新版本。
+
+更新由应用自己下载，不经过浏览器，因此不会再触发 Gatekeeper；更新包使用同一个自签名证书签名，“辅助功能”授权保持有效。应用需要能写入它所在的位置：管理员账户的“应用程序”或 `~/Applications`。直接在 DMG 中运行、或从未移动过的下载目录运行（App Translocation）时不检查更新。Windows 同样自动更新。
 
 ## 功能
 
@@ -150,6 +168,15 @@ MyGo 0.9.0 的渲染缓存会残留旧场景中的图片引用。本项目暂时
 - `Copied-macos-universal`：同时支持 Apple Silicon 和 Intel 的 macOS DMG。
 
 在对应运行页面的 **Artifacts** 中下载，产物保留 14 天。PR 也执行相同检查与打包。macOS 产物使用上文的固定自签名证书签名，未经 Apple 公证，首次打开仍会提示未识别的开发者。
+
+### 发布新版本
+
+更新包用 Ed25519 密钥签名：公钥写在 `mygo.json` 的 `updates.publicKey`，已安装的应用只接受对应私钥签名的更新。私钥由 `go tool mygo keygen` 生成，不要提交到仓库，存放在仓库 Secret `MYGO_UPDATER_PRIVATE_KEY` 中（`gh secret set MYGO_UPDATER_PRIVATE_KEY < mygo-update.key`），并另外备份：丢失后已安装的应用无法再更新，泄露则他人可以向用户推送代码。
+
+1. 修改 `mygo.json` 中的 `version`，提交并推送。
+2. 推送同名 tag：`git tag v0.2.0 && git push origin v0.2.0`。
+3. **Release Copied** 工作流校验 tag 与 `version` 一致，构建并签名 Windows 与 macOS 包，连同更新清单、`install.sh`、`install.ps1` 上传到该 tag 的草稿 Release。
+4. 在 Releases 页面检查草稿并发布。发布后它成为最新 Release，已安装的应用随即更新到它。
 
 ## 测试
 

@@ -114,5 +114,6 @@
   "sourceShortcutHint": "在面板内筛选来源应用",
   "resetSourceShortcut": "恢复应用选择默认快捷键",
   "sourceShortcutConflict": "应用选择、面板和 Stack 不能使用相同的快捷键。",
-  "sourceShortcutReserved": "请使用其他组合键，这个快捷键已用于编辑或面板操作。"
+  "sourceShortcutReserved": "请使用其他组合键，这个快捷键已用于编辑或面板操作。",
+  "restartToUpdate": "重启以完成更新"
 }

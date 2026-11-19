@@ -1,0 +1,96 @@
+name: Release Copied
+
+# Pushing a tag such as v0.2.0, the version in mygo.json, builds the apps,
+# signs their updates with MYGO_UPDATER_PRIVATE_KEY and uploads them to a
+# draft release of the tag. Publishing the draft makes it the latest
+# release, which installed apps update to.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write # the draft release, and the uploads to it
+
+jobs:
+  draft-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Check the version
+        run: |
+          version="v$(jq -r .version mygo.json)"
+          if [ "$GITHUB_REF_NAME" != "$version" ]; then
+            echo "The tag $GITHUB_REF_NAME does not match the version $version in mygo.json." >&2
+            exit 1
+          fi
+      - name: Create the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+              --draft --verify-tag --title "$GITHUB_REF_NAME" --generate-notes
+          fi
+
+  build:
+    needs: draft-release
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows x64
+            runner: windows-latest
+            platform: windows/amd64
+          - name: macOS Universal
+            runner: macos-latest
+            platform: darwin/universal
+    env:
+      CGO_ENABLED: "0"
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Prepare patched MyGo
+        run: go run ./scripts/prepare-mygo.go
+      - name: Import macOS signing certificate
+        if: runner.os == 'macOS'
+        env:
+          MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        run: bash scripts/import-signing-certificate.sh
+      - name: Build and upload
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MYGO_UPDATER_PRIVATE_KEY: ${{ secrets.MYGO_UPDATER_PRIVATE_KEY }}
+        run: |
+          if [ -z "$MYGO_UPDATER_PRIVATE_KEY" ]; then
+            echo "The MYGO_UPDATER_PRIVATE_KEY secret is missing: installed apps could not update to this release." >&2
+            exit 1
+          fi
+          sign=()
+          if [ "$RUNNER_OS" = macOS ]; then
+            # Signed ad hoc, the update would lose the Accessibility permission.
+            if [ -z "${MACOS_SIGNING_IDENTITY:-}" ]; then
+              echo "The macOS signing certificate is missing." >&2
+              exit 1
+            fi
+            sign=(-sign "$MACOS_SIGNING_IDENTITY")
+          fi
+          # Signing asks Apple's timestamp server, which sometimes refuses.
+          # Uploading again replaces the files of the draft.
+          for attempt in 1 2 3 4 5; do
+            go tool mygo build -platform ${{ matrix.platform }} "${sign[@]}" -upload && exit 0
+            echo "Build or upload failed (attempt $attempt), retrying."
+            sleep 15
+          done
+          exit 1
+      - name: Remove macOS signing keychain
+        if: always() && env.MACOS_SIGNING_KEYCHAIN != ''
+        run: security delete-keychain "$MACOS_SIGNING_KEYCHAIN"

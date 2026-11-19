@@ -1183,3 +1183,13 @@ func SourceShortcutReserved() string { return In(i18n.Locale()).SourceShortcutRe
 func (msgs Messages) SourceShortcutReserved() string {
 	return Catalog.Format(msgs.locale, "sourceShortcutReserved", nil)
 }
+
+// RestartToUpdate says "Restart to update"
+// in the language the app shows.
+func RestartToUpdate() string { return In(i18n.Locale()).RestartToUpdate() }
+
+// RestartToUpdate says "Restart to update"
+// in the language of msgs.
+func (msgs Messages) RestartToUpdate() string {
+	return Catalog.Format(msgs.locale, "restartToUpdate", nil)
+}

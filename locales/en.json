@@ -114,5 +114,6 @@
   "sourceShortcutHint": "Choose a source app inside the panel",
   "resetSourceShortcut": "Reset app selection shortcut",
   "sourceShortcutConflict": "App selection, panel and Stack shortcuts must be different.",
-  "sourceShortcutReserved": "Choose another shortcut. This combination is used for editing or panel commands."
+  "sourceShortcutReserved": "Choose another shortcut. This combination is used for editing or panel commands.",
+  "restartToUpdate": "Restart to update"
 }

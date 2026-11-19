@@ -18,6 +18,7 @@ var (
 	trayPower    = svg(`<path d="M12 3v8M6.3 5.7a8 8 0 1 0 11.4 0"/>`)
 	trayTrash    = svg(`<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v5M14 11v5"/>`)
 	trayExit     = svg(`<path d="M9 5H5v14h4M10 12h11M17 8l4 4-4 4"/>`)
+	trayUpdate   = svg(`<path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"/>`)
 )
 
 func (a *app) toggleTrayMenu() {
@@ -85,6 +86,11 @@ func (a *app) trayMenuView(c *ui.Context) {
 			ui.Box(c).Size(6, 6).Shrink(0).Radius(3).Background(ink)
 			ui.Text(c, status).FontSize(10.5).TextColor(t.TextMuted).SingleLine()
 		})
+
+		if a.updateReady != "" {
+			trayAction(c, "update", trayUpdate, tx.RestartToUpdate(), a.updateReady, t.Accent, a.restartForUpdate)
+			trayDivider(c)
+		}
 
 		shortcut := menuShortcut(a.shortcut)
 		trayAction(c, "open", iconLogo, tx.OpenPanel(), shortcut, t.Accent, a.show).Bind(&a.trayFocus)

@@ -1,8 +1,9 @@
 {
   "name": "Copied",
   "identifier": "com.example.copied",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "out": "build",
   "macos": { "infoPlist": { "LSUIElement": true }, "entitlements": "macos.entitlements.plist" },
-  "i18n": { "dir": "locales", "source": "en" }
+  "i18n": { "dir": "locales", "source": "en" },
+  "updates": { "publicKey": "oeUaZoPm0SmnK9LlTtdOrqYB6V5Z+ZE9XfAKxngObAc=", "github": "oneCatZz/Copied" }
 }
