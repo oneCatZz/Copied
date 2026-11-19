@@ -115,5 +115,16 @@
   "resetSourceShortcut": "恢复应用选择默认快捷键",
   "sourceShortcutConflict": "应用选择、面板和 Stack 不能使用相同的快捷键。",
   "sourceShortcutReserved": "请使用其他组合键，这个快捷键已用于编辑或面板操作。",
-  "restartToUpdate": "重启以完成更新"
+  "restartToUpdate": "重启以更新到 {version}",
+  "checkForUpdates": "检查更新",
+  "checkingForUpdates": "正在检查…",
+  "upToDate": "已是最新版本",
+  "upToDateAt": "已是最新 · {when} 检查",
+  "downloadingUpdate": "正在下载 {version}",
+  "updateFailed": "检查更新失败",
+  "retryUpdateCheck": "检查失败，点按重试",
+  "updatesUnavailable": "当前位置无法自动更新",
+  "updateReady": "新版本 {version} 已就绪",
+  "restartNow": "立即重启",
+  "retry": "重试"
 }

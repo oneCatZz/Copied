@@ -115,5 +115,16 @@
   "resetSourceShortcut": "Reset app selection shortcut",
   "sourceShortcutConflict": "App selection, panel and Stack shortcuts must be different.",
   "sourceShortcutReserved": "Choose another shortcut. This combination is used for editing or panel commands.",
-  "restartToUpdate": "Restart to update"
+  "restartToUpdate": "Restart to update to {version}",
+  "checkForUpdates": "Check for updates",
+  "checkingForUpdates": "Checking…",
+  "upToDate": "Up to date",
+  "upToDateAt": "Up to date · checked at {when}",
+  "downloadingUpdate": "Downloading {version}",
+  "updateFailed": "Could not check for updates",
+  "retryUpdateCheck": "Check failed. Click to retry",
+  "updatesUnavailable": "Cannot update in this location",
+  "updateReady": "Version {version} is ready",
+  "restartNow": "Restart now",
+  "retry": "Retry"
 }

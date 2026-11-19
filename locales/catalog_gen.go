@@ -1184,12 +1184,122 @@ func (msgs Messages) SourceShortcutReserved() string {
 	return Catalog.Format(msgs.locale, "sourceShortcutReserved", nil)
 }
 
-// RestartToUpdate says "Restart to update"
+// RestartToUpdate says "Restart to update to {version}"
 // in the language the app shows.
-func RestartToUpdate() string { return In(i18n.Locale()).RestartToUpdate() }
+func RestartToUpdate(version string) string { return In(i18n.Locale()).RestartToUpdate(version) }
 
-// RestartToUpdate says "Restart to update"
+// RestartToUpdate says "Restart to update to {version}"
 // in the language of msgs.
-func (msgs Messages) RestartToUpdate() string {
-	return Catalog.Format(msgs.locale, "restartToUpdate", nil)
+func (msgs Messages) RestartToUpdate(version string) string {
+	return Catalog.Format(msgs.locale, "restartToUpdate", map[string]any{"version": version})
+}
+
+// CheckForUpdates says "Check for updates"
+// in the language the app shows.
+func CheckForUpdates() string { return In(i18n.Locale()).CheckForUpdates() }
+
+// CheckForUpdates says "Check for updates"
+// in the language of msgs.
+func (msgs Messages) CheckForUpdates() string {
+	return Catalog.Format(msgs.locale, "checkForUpdates", nil)
+}
+
+// CheckingForUpdates says "Checking…"
+// in the language the app shows.
+func CheckingForUpdates() string { return In(i18n.Locale()).CheckingForUpdates() }
+
+// CheckingForUpdates says "Checking…"
+// in the language of msgs.
+func (msgs Messages) CheckingForUpdates() string {
+	return Catalog.Format(msgs.locale, "checkingForUpdates", nil)
+}
+
+// UpToDate says "Up to date"
+// in the language the app shows.
+func UpToDate() string { return In(i18n.Locale()).UpToDate() }
+
+// UpToDate says "Up to date"
+// in the language of msgs.
+func (msgs Messages) UpToDate() string {
+	return Catalog.Format(msgs.locale, "upToDate", nil)
+}
+
+// UpToDateAt says "Up to date · checked at {when}"
+// in the language the app shows.
+func UpToDateAt(when string) string { return In(i18n.Locale()).UpToDateAt(when) }
+
+// UpToDateAt says "Up to date · checked at {when}"
+// in the language of msgs.
+func (msgs Messages) UpToDateAt(when string) string {
+	return Catalog.Format(msgs.locale, "upToDateAt", map[string]any{"when": when})
+}
+
+// DownloadingUpdate says "Downloading {version}"
+// in the language the app shows.
+func DownloadingUpdate(version string) string { return In(i18n.Locale()).DownloadingUpdate(version) }
+
+// DownloadingUpdate says "Downloading {version}"
+// in the language of msgs.
+func (msgs Messages) DownloadingUpdate(version string) string {
+	return Catalog.Format(msgs.locale, "downloadingUpdate", map[string]any{"version": version})
+}
+
+// UpdateFailed says "Could not check for updates"
+// in the language the app shows.
+func UpdateFailed() string { return In(i18n.Locale()).UpdateFailed() }
+
+// UpdateFailed says "Could not check for updates"
+// in the language of msgs.
+func (msgs Messages) UpdateFailed() string {
+	return Catalog.Format(msgs.locale, "updateFailed", nil)
+}
+
+// RetryUpdateCheck says "Check failed. Click to retry"
+// in the language the app shows.
+func RetryUpdateCheck() string { return In(i18n.Locale()).RetryUpdateCheck() }
+
+// RetryUpdateCheck says "Check failed. Click to retry"
+// in the language of msgs.
+func (msgs Messages) RetryUpdateCheck() string {
+	return Catalog.Format(msgs.locale, "retryUpdateCheck", nil)
+}
+
+// UpdatesUnavailable says "Cannot update in this location"
+// in the language the app shows.
+func UpdatesUnavailable() string { return In(i18n.Locale()).UpdatesUnavailable() }
+
+// UpdatesUnavailable says "Cannot update in this location"
+// in the language of msgs.
+func (msgs Messages) UpdatesUnavailable() string {
+	return Catalog.Format(msgs.locale, "updatesUnavailable", nil)
+}
+
+// UpdateReady says "Version {version} is ready"
+// in the language the app shows.
+func UpdateReady(version string) string { return In(i18n.Locale()).UpdateReady(version) }
+
+// UpdateReady says "Version {version} is ready"
+// in the language of msgs.
+func (msgs Messages) UpdateReady(version string) string {
+	return Catalog.Format(msgs.locale, "updateReady", map[string]any{"version": version})
+}
+
+// RestartNow says "Restart now"
+// in the language the app shows.
+func RestartNow() string { return In(i18n.Locale()).RestartNow() }
+
+// RestartNow says "Restart now"
+// in the language of msgs.
+func (msgs Messages) RestartNow() string {
+	return Catalog.Format(msgs.locale, "restartNow", nil)
+}
+
+// Retry says "Retry"
+// in the language the app shows.
+func Retry() string { return In(i18n.Locale()).Retry() }
+
+// Retry says "Retry"
+// in the language of msgs.
+func (msgs Messages) Retry() string {
+	return Catalog.Format(msgs.locale, "retry", nil)
 }

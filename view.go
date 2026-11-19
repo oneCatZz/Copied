@@ -269,6 +269,9 @@ func (a *app) header(c *ui.Context) {
 		}
 		gear.Transition(fadeMotion).Children(func() {
 			ui.Icon(c, iconSettings).FontSize(15).TextColor(color)
+			if a.updateShowsReady() {
+				ui.Box(c).Absolute().Top(5).Right(5).Size(7, 7).Radius(3.5).Background(t.Accent)
+			}
 		})
 	})
 	ui.Row(c).Padding(10, 22, 6, 22).Gap(12).AlignItems(ui.Center).Children(func() {
@@ -718,9 +721,10 @@ func (a *app) settingsDialog(c *ui.Context) {
 			}
 			a.languageOptions(c)
 
+			ui.Box(c).Height(1).Shrink(0).Background(t.Border.Alpha(0.7))
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-				ui.Spacer(c)
-				if dialogButton(c, "finish-settings", tx.Done(), true).Clicked() {
+				ready := a.updateStatus(c)
+				if dialogButton(c, "finish-settings", tx.Done(), !ready).Clicked() {
 					a.settingsOpen = false
 				}
 			})

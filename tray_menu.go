@@ -87,8 +87,9 @@ func (a *app) trayMenuView(c *ui.Context) {
 			ui.Text(c, status).FontSize(10.5).TextColor(t.TextMuted).SingleLine()
 		})
 
-		if a.updateReady != "" {
-			trayAction(c, "update", trayUpdate, tx.RestartToUpdate(), a.updateReady, t.Accent, a.restartForUpdate)
+		ready := a.updateShowsReady()
+		if ready {
+			trayAction(c, "update", trayUpdate, tx.RestartToUpdate(a.updateReady), appVersion(), t.Accent, a.restartForUpdate).TextColor(t.Accent)
 			trayDivider(c)
 		}
 
@@ -115,6 +116,10 @@ func (a *app) trayMenuView(c *ui.Context) {
 			ui.Text(c, locales.Catalog.Format(c.Locale(), a.trayError, nil)).FontSize(11).TextColor(t.Danger).Padding(4, 10).SingleLine()
 		}
 		trayDivider(c)
+		if !ready {
+			a.trayUpdateRow(c, tx, t.TextMuted)
+			trayDivider(c)
+		}
 		trayAction(c, "quit", trayExit, tx.QuitCopied(), "", t.Danger, mygo.App.Quit).TextColor(t.Danger)
 	})
 }

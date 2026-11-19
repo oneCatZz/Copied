@@ -118,10 +118,15 @@ type app struct {
 	paused   atomic.Bool  // the watcher records nothing
 	ownUntil atomic.Int64 // Unix milliseconds, see ownWrite
 
-	lastUsed      time.Time    // when the panel last hid, see idleForUpdate
-	lastCopy      atomic.Int64 // Unix milliseconds of the last clipboard change
-	updateReady   string       // the version installed, which runs from the next launch
-	updateWaiting bool         // restartWhenIdle runs
+	lastUsed       time.Time     // when the panel last hid, see idleForUpdate
+	lastCopy       atomic.Int64  // Unix milliseconds of the last clipboard change
+	updateState    updateState   // what the updater does, or found
+	updateVersion  string        // the version downloading
+	updateProgress int           // its percentage downloaded
+	updateChecked  time.Time     // when the last check ended
+	updateReady    string        // the version installed, which runs from the next launch
+	updateWaiting  bool          // restartWhenIdle runs
+	updateNow      chan struct{} // asks checkUpdates to check at once
 }
 
 // reload lists the clips of the filter and the query again.
@@ -395,6 +400,7 @@ func (a *app) ready() {
 		a.store.Close()
 	})
 	go a.watch()
+	a.updateNow = make(chan struct{}, 1)
 	go a.checkUpdates()
 	if !startedInBackground() {
 		a.show() // started by the user: show what it does
