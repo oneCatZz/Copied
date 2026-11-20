@@ -150,10 +150,8 @@ func textKind(text string) Kind {
 	if colorPattern.MatchString(s) {
 		return KindColor
 	}
-	if !strings.ContainsAny(s, " \t\r\n") {
-		if u, err := url.Parse(s); err == nil && u.Host != "" && (u.Scheme == "http" || u.Scheme == "https") {
-			return KindLink
-		}
+	if parseWebLink(s) != nil {
+		return KindLink
 	}
 	if _, _, ok := detectCode(text); ok {
 		return KindCode

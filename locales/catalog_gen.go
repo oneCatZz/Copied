@@ -1104,6 +1104,16 @@ func (msgs Messages) WrapLines() string {
 	return Catalog.Format(msgs.locale, "wrapLines", nil)
 }
 
+// OpenBrowserLink says "{modifier}+click to open in your browser"
+// in the language the app shows.
+func OpenBrowserLink(modifier string) string { return In(i18n.Locale()).OpenBrowserLink(modifier) }
+
+// OpenBrowserLink says "{modifier}+click to open in your browser"
+// in the language of msgs.
+func (msgs Messages) OpenBrowserLink(modifier string) string {
+	return Catalog.Format(msgs.locale, "openBrowserLink", map[string]any{"modifier": modifier})
+}
+
 // PreviewTruncated says "Preview shortened. Pasting keeps the full content."
 // in the language the app shows.
 func PreviewTruncated() string { return In(i18n.Locale()).PreviewTruncated() }
