@@ -32,12 +32,13 @@ type previewKey struct {
 // clipPreview is the whole text of the chosen clip, as far as the preview
 // shows it. It is read off the UI thread when the list holds only its start.
 type clipPreview struct {
-	id       int64
-	gen      uint64 // advances as the preview changes clips, to reject stale reads
-	loaded   bool
-	original *thumb // the whole picture of an image clip, once it decoded
-	viewing  bool   // the picture shows over the whole panel (imageViewer)
-	view     viewer // where it shows there
+	id        int64
+	gen       uint64 // advances as the preview changes clips, to reject stale reads
+	loaded    bool
+	original  *thumb // the whole picture of an image clip, once it decoded
+	viewing   bool   // the picture shows over the whole panel (imageViewer)
+	view      viewer // where it shows there
+	linkPress linkPress
 	previewBody
 }
 
@@ -46,6 +47,7 @@ type previewBody struct {
 	lines     int  // of the whole text, before it was cut short
 	truncated bool // the text was cut short for the preview
 	code      *codePreview
+	links     []previewLink
 }
 
 // reset forgets the preview, and any read on its way.
@@ -115,6 +117,14 @@ func preparePreview(kind Kind, text string) previewBody {
 	text = strings.ReplaceAll(text, "\t", "    ")
 	body := previewBody{lines: strings.Count(text, "\n") + 1}
 	body.text, body.truncated = cutPreview(text)
+	if kind == KindText || kind == KindCode {
+		croppedMidToken := false
+		if body.truncated {
+			next, _ := utf8.DecodeRuneInString(text[len(body.text):])
+			croppedMidToken = !webLinkDelimiter(next)
+		}
+		body.links = linksInPreview(body.text, croppedMidToken)
+	}
 	if kind == KindCode {
 		body.code = highlightCode(language, body.text, previewMaxLines)
 	}
@@ -416,8 +426,21 @@ func (a *app) previewContent(c *ui.Context, clip *Clip, p *clipPreview, hue ui.C
 			host = u.Host
 		}
 		ui.Scroll(c.Key(previewKey{id: clip.ID})).Grow(1).Basis(0).Padding(14, 16).Gap(8).Children(func() {
-			ui.Text(c, host).FontSize(15).FontWeight(600).TextColor(hue).Selectable()
-			ui.Text(c, link).FontSize(12.5).LineHeight(1.6).TextColor(t.TextMuted).Selectable()
+			openable := p.loaded && !p.truncated && parseWebLink(link) != nil
+			for i, label := range []string{host, link} {
+				el := ui.RichText(c.Key(i)).Selectable()
+				if i == 0 {
+					el.FontSize(15).FontWeight(600).TextColor(hue)
+				} else {
+					el.FontSize(12.5).LineHeight(1.6).TextColor(t.TextMuted)
+				}
+				el.Children(func() {
+					part := ui.Text(c, label)
+					if openable {
+						p.previewWebLink(c, part, label, link)
+					}
+				})
+			}
 		})
 	case KindFiles:
 		original := p.original
@@ -462,7 +485,13 @@ func (a *app) previewContent(c *ui.Context, clip *Clip, p *clipPreview, hue ui.C
 		scroll.Grow(1).Basis(0).Padding(12, 16).Children(func() {
 			var code ui.Element
 			if p.loaded && p.code != nil {
-				code = ui.RichText(c, p.code.styledSpans(t)...)
+				spans := p.code.styledSpans(t)
+				if len(p.links) > 0 {
+					code = ui.RichText(c).TextColor(t.Text.Alpha(0.86))
+					p.linkedPreviewText(c, code, spans)
+				} else {
+					code = ui.RichText(c, spans...)
+				}
 			} else {
 				code = ui.Text(c, text).TextColor(t.Text.Alpha(0.86))
 			}
@@ -473,7 +502,14 @@ func (a *app) previewContent(c *ui.Context, clip *Clip, p *clipPreview, hue ui.C
 		})
 	default:
 		ui.Scroll(c.Key(previewKey{id: clip.ID})).Grow(1).Basis(0).Padding(14, 18).Children(func() {
-			ui.Text(c, text).FontSize(13).LineHeight(1.65).TextColor(t.Text.Alpha(0.9)).Selectable()
+			var body ui.Element
+			if p.loaded && len(p.links) > 0 {
+				body = ui.RichText(c)
+				p.linkedPreviewText(c, body, []ui.Span{{Text: text}})
+			} else {
+				body = ui.Text(c, text)
+			}
+			body.FontSize(13).LineHeight(1.65).TextColor(t.Text.Alpha(0.9)).Selectable()
 		})
 	}
 }
