@@ -226,13 +226,18 @@ func (a *app) paste(i int, plain bool) {
 	}
 	target := a.target
 	var writes []func() bool
+	var gap time.Duration
 	if ids := a.batchIDs(i); ids != nil {
-		writes = a.batchPasteWrites(ids, target, plain)
+		terminal := terminalWindow(target)
+		if terminal {
+			gap = terminalPasteGap
+		}
+		writes = a.batchPasteWrites(ids, target, plain, terminal)
 	} else {
 		id, kind := a.clips[i].ID, a.clips[i].Kind
 		writes = []func() bool{func() bool { return a.copyForPaste(id, kind, target, plain) }}
 	}
-	a.queuePaste(pasteRequest{target: target, writes: writes, panel: a.panel, epoch: a.panelEpoch})
+	a.queuePaste(pasteRequest{target: target, writes: writes, panel: a.panel, epoch: a.panelEpoch, gap: gap})
 }
 
 func (a *app) copyForPaste(id int64, kind Kind, target uintptr, plain bool) bool {

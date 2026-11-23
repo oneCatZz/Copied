@@ -109,11 +109,17 @@ func (a *app) pasteNext() {
 // pasteGap lets the target app read the clipboard before the next write.
 const pasteGap = 150 * time.Millisecond
 
+// terminalPasteGap separates the pastes of a batch into a terminal, whose
+// apps get each paste as keys and join keys that come close together into
+// one paste: a picture's path joined to more text is not taken for it.
+const terminalPasteGap = 500 * time.Millisecond
+
 type pasteRequest struct {
 	target uintptr
 	writes []func() bool
-	panel  *mygo.Window // when set, the panel hides after the first successful write
-	epoch  uint64       // cancel a queued request if its panel session ended
+	panel  *mygo.Window  // when set, the panel hides after the first successful write
+	epoch  uint64        // cancel a queued request if its panel session ended
+	gap    time.Duration // the wait after each paste; pasteGap when zero
 }
 
 // queuePaste serializes clipboard writes and paste events from the panel and
@@ -136,6 +142,10 @@ func (a *app) queuePaste(p pasteRequest) {
 }
 
 func (a *app) runPaste(p pasteRequest) {
+	gap := p.gap
+	if gap == 0 {
+		gap = pasteGap
+	}
 	started := false
 	for _, write := range p.writes {
 		var ok, canceled bool
@@ -156,7 +166,7 @@ func (a *app) runPaste(p pasteRequest) {
 		if ok {
 			started = true
 			pasteInto(p.target)
-			time.Sleep(pasteGap)
+			time.Sleep(gap)
 		}
 	}
 }

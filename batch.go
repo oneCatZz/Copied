@@ -103,7 +103,7 @@ func (a *app) pick(i int) {
 
 // batchPasteWrites keeps text together and sends native clipboard data for
 // attachments in selection order. Each image needs its own paste event.
-func (a *app) batchPasteWrites(ids []int64, target uintptr, plain bool) []func() bool {
+func (a *app) batchPasteWrites(ids []int64, target uintptr, plain, terminal bool) []func() bool {
 	kinds := make(map[int64]Kind, len(a.clips))
 	for _, clip := range a.clips {
 		kinds[clip.ID] = clip.Kind
@@ -130,10 +130,16 @@ func (a *app) batchPasteWrites(ids []int64, target uintptr, plain bool) []func()
 		}
 	}
 	flushFiles()
-	if len(texts) > 0 {
-		return slices.Insert(writes, 0, writeText)
+	if len(texts) == 0 {
+		return writes
 	}
-	return writes
+	if terminal {
+		// Claude Code and Codex take a pasted path for a picture only when
+		// it arrives alone, and a long text arrives as keys for a while, so
+		// the text goes last and cannot run into the pictures' paths.
+		return append(writes, writeText)
+	}
+	return slices.Insert(writes, 0, writeText)
 }
 
 // copyBatch puts the clips with IDs on the clipboard as one, in turn, and
