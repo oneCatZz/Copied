@@ -228,7 +228,9 @@ func (a *app) paste(i int, plain bool) {
 	var writes []func() bool
 	var gap time.Duration
 	if ids := a.batchIDs(i); ids != nil {
-		terminal := terminalWindow(target)
+		// Shift+Enter pastes pictures as paths, as into a terminal, which
+		// serves the terminals terminalWindow does not recognize.
+		terminal := plain || terminalWindow(target)
 		if terminal {
 			gap = terminalPasteGap
 		}
