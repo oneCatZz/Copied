@@ -227,7 +227,10 @@ func (a *app) paste(i int, plain bool) {
 	target := a.target
 	var writes []func() bool
 	if ids := a.batchIDs(i); ids != nil {
-		writes = a.batchPasteWrites(ids, target, plain)
+		// Shift+Enter pastes pictures as paths, as into a terminal, which
+		// serves the terminals terminalWindow does not recognize.
+		terminal := plain || terminalWindow(target)
+		writes = a.batchPasteWrites(ids, target, plain, terminal)
 	} else {
 		id, kind := a.clips[i].ID, a.clips[i].Kind
 		writes = []func() bool{func() bool { return a.copyForPaste(id, kind, target, plain) }}
