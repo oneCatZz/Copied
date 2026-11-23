@@ -112,7 +112,7 @@ const pasteGap = 150 * time.Millisecond
 // terminalPasteGap separates the pastes of a batch into a terminal, whose
 // apps get each paste as keys and join keys that come close together into
 // one paste: a picture's path joined to more text is not taken for it.
-const terminalPasteGap = 500 * time.Millisecond
+const terminalPasteGap = 200 * time.Millisecond
 
 type pasteRequest struct {
 	target uintptr
