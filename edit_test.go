@@ -183,3 +183,39 @@ func TestBatchDeleteAsksFirst(t *testing.T) {
 	}
 	tt.Advance(time.Second)
 }
+
+func TestPreviewEditEmptiedDeletesOnLeaving(t *testing.T) {
+	a := editTestApp(t, "keep", "switch", "remove")
+	tt := ui.NewTester(a.view, panelWidth, panelHeight)
+	id, switched, keep := a.clips[0].ID, a.clips[1].ID, a.clips[2].ID
+	a.stack = []int64{id}
+	if err := tt.Click("Edit"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Key(ui.Cmd, ui.KeyA)
+	tt.Key(0, ui.KeyBackspace)
+	tt.Advance(time.Second)
+	// Emptied while typing, it stays until the editing ends.
+	if !a.editing() || storedText(t, a, id) != "remove" || !tt.HasText("Leaving it empty deletes this item") {
+		t.Fatalf("emptying while typing: editing=%v, draft=%q", a.editing(), a.preview.draft)
+	}
+	tt.Key(0, ui.KeyEscape)
+	if a.editing() || a.store.Has(id) || len(a.clips) != 2 || len(a.stack) != 0 {
+		t.Fatalf("leaving it empty: editing=%v, has=%v, clips=%d, stack=%v", a.editing(), a.store.Has(id), len(a.clips), a.stack)
+	}
+
+	// Choosing another clip after emptying one deletes it too.
+	a.choose(0)
+	tt.Frame()
+	if err := tt.Click("Edit"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Key(ui.Cmd, ui.KeyA)
+	tt.Key(0, ui.KeyBackspace)
+	a.choose(1)
+	tt.Frame()
+	tt.Frame()
+	if a.store.Has(switched) || len(a.clips) != 1 || a.clips[0].ID != keep || a.chosen != 0 {
+		t.Fatalf("an emptied clip left for another: has=%v, clips=%d", a.store.Has(switched), len(a.clips))
+	}
+}

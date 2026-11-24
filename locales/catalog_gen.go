@@ -1373,3 +1373,13 @@ func AutoSave() string { return In(i18n.Locale()).AutoSave() }
 func (msgs Messages) AutoSave() string {
 	return Catalog.Format(msgs.locale, "autoSave", nil)
 }
+
+// EmptyDeletes says "Leaving it empty deletes this item"
+// in the language the app shows.
+func EmptyDeletes() string { return In(i18n.Locale()).EmptyDeletes() }
+
+// EmptyDeletes says "Leaving it empty deletes this item"
+// in the language of msgs.
+func (msgs Messages) EmptyDeletes() string {
+	return Catalog.Format(msgs.locale, "emptyDeletes", nil)
+}

@@ -57,7 +57,7 @@ type clipPreview struct {
 const editSaveDelay = 600 * time.Millisecond
 
 // editDirty reports whether the draft differs from the text saved. An
-// empty draft is never saved: deleting is for the Delete button.
+// empty draft is not saved: leaving it empty deletes the clip.
 func (p *clipPreview) editDirty() bool {
 	return p.editing && strings.TrimSpace(p.draft) != "" && p.draft != p.editSaved &&
 		p.draft != strings.ReplaceAll(p.editSaved, "\r\n", "\n")
@@ -344,9 +344,20 @@ func (a *app) startEdit(clip *Clip) {
 // flushEdit saves the draft as the clip's text, when it changed, and
 // shows it in the list at once. Saving as typing pauses leaves alone
 // another clip holding the same text; saving as the editing ends (merge)
-// has that clip give way, and reports that the history needs reloading.
+// has that clip give way, or deletes the edited clip when the draft is
+// empty, and reports that the history needs reloading.
 func (a *app) flushEdit(merge bool) (merged bool) {
 	p := &a.preview
+	if merge && p.editing && a.store != nil && strings.TrimSpace(p.draft) == "" {
+		// Emptied, as the single Delete does, without asking.
+		if err := a.store.Delete(p.id); err != nil {
+			log.Print("deleting clip: ", err)
+			p.editFailed = true
+			return false
+		}
+		p.editing = false
+		return true
+	}
 	if a.store == nil || !p.editDirty() || !merge && p.draft == p.editBlocked {
 		return false
 	}
@@ -516,7 +527,11 @@ func (a *app) detail(c *ui.Context) (action func()) {
 				if dialogButton(c, "finish-edit", tx.Done(), true).Clicked() {
 					action = a.finishEdit
 				}
-				ui.Text(c, tx.AutoSave()).FontSize(11.5).TextColor(t.TextMuted).SingleLine()
+				if strings.TrimSpace(p.draft) == "" {
+					ui.Text(c, tx.EmptyDeletes()).FontSize(11.5).TextColor(t.Danger).SingleLine()
+				} else {
+					ui.Text(c, tx.AutoSave()).FontSize(11.5).TextColor(t.TextMuted).SingleLine()
+				}
 				return
 			}
 			pasteLabel, copyLabel := tx.Paste(), tx.CopyOnly()
