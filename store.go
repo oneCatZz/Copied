@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/plugins/sqlite"
@@ -318,6 +319,38 @@ func (s *Store) SetPinned(id int64, pinned bool) error {
 
 func (s *Store) Delete(id int64) error {
 	_, err := s.db.Execute(context.Background(), `DELETE FROM clips WHERE id = ?`, id)
+	return err
+}
+
+// DeleteClips deletes several clips at once, all or none of them.
+func (s *Store) DeleteClips(ids []int64) error {
+	statements := make([]sqlite.Statement, 0, len(ids))
+	for _, id := range ids {
+		statements = append(statements, sqlite.Statement{SQL: `DELETE FROM clips WHERE id = ?`, Args: []any{id}})
+	}
+	if len(statements) == 0 {
+		return nil
+	}
+	_, err := s.db.Transaction(context.Background(), statements)
+	return err
+}
+
+// UpdateText replaces the text of a clip edited in the preview. The clip
+// keeps its place and its groups, and takes the kind of its new text; the
+// formatting copied with the old text no longer matches and is dropped.
+// Another clip that already holds the new text gives way to it, its
+// groups joining the edited clip's.
+func (s *Store) UpdateText(id int64, text string) error {
+	hash := hashOf(KindText, []byte(text))
+	_, err := s.db.Transaction(context.Background(), []sqlite.Statement{
+		{SQL: `INSERT OR IGNORE INTO clip_groups (clip_id, group_id)
+			SELECT ?, group_id FROM clip_groups WHERE clip_id IN (SELECT id FROM clips WHERE hash = ? AND id <> ?)`,
+			Args: []any{id, hash, id}},
+		{SQL: `DELETE FROM clips WHERE hash = ? AND id <> ?`, Args: []any{hash, id}},
+		{SQL: `UPDATE clips SET kind = ?, text = ?, html = '', length = ?, hash = ?,
+			pinned = EXISTS (SELECT 1 FROM clip_groups WHERE clip_id = ? AND group_id = ?) WHERE id = ?`,
+			Args: []any{string(textKind(text)), text, utf8.RuneCountInString(text), hash, id, defaultGroupID, id}},
+	})
 	return err
 }
 

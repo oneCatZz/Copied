@@ -7,6 +7,7 @@ import (
 	"math"
 	"net/url"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -40,6 +41,12 @@ type clipPreview struct {
 	view      viewer // where it shows there
 	linkPress linkPress
 	previewBody
+
+	editing      bool   // the preview edits the clip's text (previewEditor)
+	editSession  uint64 // a fresh editor for each time it starts
+	draft        string // the text as edited
+	editOriginal string // the whole text when the editing started
+	editFailed   bool   // saving the draft failed
 }
 
 type previewBody struct {
@@ -285,6 +292,96 @@ func cutPreview(text string) (string, bool) {
 	return text, false
 }
 
+// editable reports whether the preview can edit the text of a clip of a
+// kind: the clips of text, not of pictures or files.
+func editable(kind Kind) bool {
+	return kind == KindText || kind == KindCode || kind == KindLink || kind == KindColor
+}
+
+// editing reports whether the preview edits the chosen clip.
+func (a *app) editing() bool {
+	p := &a.preview
+	return p.editing && a.chosen >= 0 && a.chosen < len(a.clips) && a.clips[a.chosen].ID == p.id
+}
+
+// startEdit lets the preview edit the whole text of a clip.
+func (a *app) startEdit(clip *Clip) {
+	text := clip.Text
+	if a.store != nil {
+		whole, err := a.store.Text(clip.ID)
+		if err != nil {
+			log.Print("reading clip: ", err)
+			return
+		}
+		text = whole
+	}
+	p := a.previewOf(clip)
+	p.editing, p.draft, p.editOriginal, p.editFailed = true, text, text, false
+	p.editSession++
+}
+
+// cancelEdit leaves the editor, forgetting the draft.
+func (a *app) cancelEdit() {
+	p := &a.preview
+	p.editing, p.draft, p.editOriginal, p.editFailed = false, "", "", false
+	a.input.Focus()
+}
+
+// saveEdit keeps the draft as the clip's text and leaves the editor. An
+// empty draft is not saved: deleting is for the Delete button.
+func (a *app) saveEdit() {
+	if !a.editing() {
+		return
+	}
+	p := &a.preview
+	id, text := p.id, p.draft
+	if strings.TrimSpace(text) == "" {
+		return
+	}
+	if text == p.editOriginal || text == strings.ReplaceAll(p.editOriginal, "\r\n", "\n") {
+		a.cancelEdit()
+		return
+	}
+	if err := a.store.UpdateText(id, text); err != nil {
+		log.Print("saving clip: ", err)
+		p.editFailed = true
+		return
+	}
+	a.pruneStack() // a clip holding the same text gave way
+	a.preview.reset()
+	a.reload()
+	if i := slices.IndexFunc(a.clips, func(c *Clip) bool { return c.ID == id }); i >= 0 {
+		a.chosen = i
+	}
+	a.input.Focus()
+}
+
+// editKey gives each editing of a clip its own editor.
+type editKey struct {
+	id      int64
+	session uint64
+}
+
+// previewButton is a small button of the preview's header, highlighted
+// while active.
+func previewButton(c *ui.Context, key, label string, active bool) ui.Element {
+	t := c.Theme()
+	button := ui.ButtonBase(c.Key(key)).Height(24).PaddingX(8).Radius(6).
+		Cursor(ui.CursorPointer).Label(label).Border(1, t.Border)
+	ink := t.TextMuted
+	switch {
+	case active:
+		button.Background(t.Accent.Alpha(0.12)).Border(1, t.Accent.Alpha(0.4))
+		ink = t.Accent
+	case button.Hovered():
+		button.Background(t.SurfaceHover)
+		ink = t.Text
+	}
+	return button.Transition(fadeMotion).Children(func() {
+		ui.Text(c, label).FontSize(11).TextColor(ink).SingleLine()
+	})
+}
+
 // detail shows the chosen clip whole, as far as it can, with what to do
 // with it. It returns what the user asked, if anything.
 func (a *app) detail(c *ui.Context) (action func()) {
@@ -296,6 +393,8 @@ func (a *app) detail(c *ui.Context) (action func()) {
 	p := a.previewOf(clip)
 	hue := kindColor(clip.Kind, t.Dark)
 	textual := clip.Kind == KindText || clip.Kind == KindCode
+	editing := a.editing()
+	batch := a.batchIDs(i) != nil
 
 	pane := ui.Column(c.Key("detail")).Grow(1).Basis(0).MinWidth(0)
 	paneSurface(c, pane).Children(func() {
@@ -309,25 +408,21 @@ func (a *app) detail(c *ui.Context) (action func()) {
 				meta += " · " + tx.LineCount(p.lines)
 			}
 			ui.Text(c, meta).FontSize(11.5).TextColor(t.TextMuted).SingleLine().Grow(1)
-			if clip.Kind == KindCode {
-				wrap := ui.ButtonBase(c.Key("wrap-lines")).Height(24).PaddingX(8).Radius(6).
-					Cursor(ui.CursorPointer).Label(tx.WrapLines()).Border(1, t.Border)
-				ink := t.TextMuted
-				switch {
-				case a.codeWrap:
-					wrap.Background(t.Accent.Alpha(0.12)).Border(1, t.Accent.Alpha(0.4))
-					ink = t.Accent
-				case wrap.Hovered():
-					wrap.Background(t.SurfaceHover)
-					ink = t.Text
-				}
-				if wrap.Clicked() {
+			if clip.Kind == KindCode && !editing {
+				if previewButton(c, "wrap-lines", tx.WrapLines(), a.codeWrap).Clicked() {
 					a.codeWrap = !a.codeWrap
 					a.input.Focus()
 				}
-				wrap.Transition(fadeMotion).Children(func() {
-					ui.Text(c, tx.WrapLines()).FontSize(11).TextColor(ink).SingleLine()
-				})
+			}
+			// The whole text, once read, and when the preview shows it all.
+			if editable(clip.Kind) && !batch && p.loaded && !p.truncated {
+				if previewButton(c, "edit-clip", tx.Edit(), editing).Clicked() {
+					if editing {
+						a.cancelEdit()
+					} else {
+						action = func() { a.startEdit(clip) }
+					}
+				}
 			}
 			when := ago(clip.UsedAt, c.Locale())
 			if clip.Source != "" {
@@ -337,14 +432,30 @@ func (a *app) detail(c *ui.Context) (action func()) {
 		})
 		ui.Box(c).Height(1).Shrink(0).Background(t.Border)
 
-		a.previewContent(c, clip, p, hue)
+		if editing {
+			a.previewEditor(c, clip, p)
+			if p.editFailed {
+				ui.Text(c, tx.EditFailed()).FontSize(11).TextColor(t.Danger).Padding(0, 16, 6, 16).SingleLine()
+			}
+		} else {
+			a.previewContent(c, clip, p, hue)
+		}
 
-		if p.truncated {
+		if p.truncated && !editing {
 			ui.Text(c, tx.PreviewTruncated()).FontSize(11).TextColor(t.TextMuted).Padding(6, 16).SingleLine()
 		}
 		ui.Box(c).Height(1).Shrink(0).Background(t.Border)
 		ui.Row(c).Padding(10, 12).Gap(8).AlignItems(ui.Center).Children(func() {
-			batch := a.batchIDs(i) != nil
+			if editing {
+				blank := strings.TrimSpace(p.draft) == ""
+				if dialogButton(c, "save-edit", tx.Save(), !blank).Clicked() && !blank {
+					action = a.saveEdit
+				}
+				if dialogButton(c, "cancel-edit", tx.Cancel(), false).Clicked() {
+					action = a.cancelEdit
+				}
+				return
+			}
 			pasteLabel, copyLabel := tx.Paste(), tx.CopyOnly()
 			if batch {
 				pasteLabel, copyLabel = tx.PasteAll(), tx.CopyAll()
@@ -364,7 +475,11 @@ func (a *app) detail(c *ui.Context) (action func()) {
 			if dialogButton(c, "detail-groups", tx.AddToGroups(), false).Clicked() {
 				action = func() { a.openClipGroups(i) }
 			}
-			if dialogButton(c, "detail-delete", tx.Delete(), false).Clicked() {
+			deleteLabel := tx.Delete()
+			if batch {
+				deleteLabel = tx.DeleteAll()
+			}
+			if dialogButton(c, "detail-delete", deleteLabel, false).Clicked() {
 				action = func() {
 					a.remove(i)
 					a.input.Focus()
@@ -373,6 +488,27 @@ func (a *app) detail(c *ui.Context) (action func()) {
 		})
 	})
 	return action
+}
+
+// previewEditor edits the whole text of the chosen clip, in place of its
+// preview.
+func (a *app) previewEditor(c *ui.Context, clip *Clip, p *clipPreview) {
+	t, tx := c.Theme(), locales.In(c.Locale())
+	editTheme := lightEditTheme
+	if t.Dark {
+		editTheme = darkEditTheme
+	}
+	ui.Column(c).Grow(1).Basis(0).MinHeight(0).Padding(10, 12).Children(func() {
+		ui.Themed(c.Key(editKey{clip.ID, p.editSession}), editTheme).Column().Grow(1).Basis(0).MinHeight(0).Children(func() {
+			editor := ui.TextAreaBase(c.Key("editor"), &p.draft).AutoFocus().Grow(1).Basis(0).MinHeight(0).
+				Padding(10, 12).Radius(8).Background(t.Background).Border(1, t.Accent).Shadow(0, 0, 0, 3, t.Accent.Alpha(0.2)).
+				CaretColor(t.Accent).TextColor(t.Text).FontSize(13).LineHeight(1.6).Label(tx.Edit())
+			if clip.Kind == KindCode {
+				editor.Font("monospace").FontSize(12)
+			}
+			editor.PopoverMenu(func(m *ui.Menu) { m.EditItems() })
+		})
+	})
 }
 
 // previewContent is the middle of the preview: the whole text, code, link

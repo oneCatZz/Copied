@@ -54,7 +54,11 @@ func (a *app) cardMenu(c *ui.Context, card ui.Element, i int, clip *Clip) (actio
 			action = func() { a.toggleStack(i) }
 		}
 		trayDivider(c)
-		if menuActionRow(c, m.Item().TextColor(t.Danger), trayTrash, tx.Delete(), menuShortcut("CmdOrCtrl+Backspace"), t.Danger).Clicked() {
+		deleteLabel := tx.Delete()
+		if batch {
+			deleteLabel = tx.DeleteAll()
+		}
+		if menuActionRow(c, m.Item().TextColor(t.Danger), trayTrash, deleteLabel, menuShortcut("CmdOrCtrl+Backspace"), t.Danger).Clicked() {
 			action = func() { a.remove(i) }
 		}
 	})

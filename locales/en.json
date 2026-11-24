@@ -127,5 +127,10 @@
   "updatesUnavailable": "Cannot update in this location",
   "updateReady": "Version {version} is ready",
   "restartNow": "Restart now",
-  "retry": "Retry"
+  "retry": "Retry",
+  "edit": "Edit",
+  "deleteAll": "Delete all",
+  "deleteClipsTitle": "{count, plural, one {Delete # item?} other {Delete # items?}}",
+  "deleteClipsHint": "They will be removed from history and from every group. This cannot be undone.",
+  "editFailed": "Could not save the changes."
 }

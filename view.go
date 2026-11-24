@@ -65,7 +65,7 @@ func (a *app) key(mods ui.Modifiers, key ui.Key) bool {
 	case a.isSourceShortcut(mods, key):
 		a.openSourcePicker("")
 	case key == ui.KeyTab && (mods == 0 || mods == ui.Shift):
-		if a.settingsOpen || a.groupDialogOpen || a.typeMenuOpen || a.groupMenuOpen || a.sourceMenuOpen || a.cardMenuID != 0 {
+		if a.settingsOpen || a.groupDialogOpen || a.deleteOpen || a.typeMenuOpen || a.groupMenuOpen || a.sourceMenuOpen || a.cardMenuID != 0 {
 			return false
 		}
 		a.cycleGroup(mods == ui.Shift)
@@ -170,7 +170,17 @@ func (a *app) view(c *ui.Context) {
 	}
 
 	// The keys the search field leaves, wherever the focus is.
-	if !a.settingsOpen && !a.groupDialogOpen && !a.typeMenuOpen && !a.groupMenuOpen && !a.sourceMenuOpen {
+	dialogs := a.settingsOpen || a.groupDialogOpen || a.typeMenuOpen || a.groupMenuOpen || a.sourceMenuOpen || a.deleteOpen
+	if a.editing() && !dialogs {
+		// The editor in the preview has the keys, but for saving and leaving.
+		save := c.Shortcut(ui.Cmd, ui.KeyS)
+		if c.Shortcut(ui.Cmd, ui.KeyEnter) || save {
+			a.saveEdit()
+		}
+		if c.Shortcut(0, ui.KeyEscape) {
+			a.cancelEdit()
+		}
+	} else if !dialogs {
 		type combo struct {
 			mods ui.Modifiers
 			key  ui.Key
@@ -213,6 +223,7 @@ func (a *app) view(c *ui.Context) {
 		a.footer(c)
 		a.settingsDialog(c)
 		a.groupDialog(c)
+		a.deleteDialog(c)
 		a.imageViewer(c)
 	})
 	a.scrollTo = false
@@ -639,11 +650,15 @@ func (a *app) footer(c *ui.Context) {
 		})
 	}
 	ui.Row(c).Padding(0, 22, 16, 22).Gap(18).AlignItems(ui.Center).Children(func() {
-		if len(a.picked) > 1 {
+		editing := a.editing()
+		if editing {
+			hint([]string{cmd, "S"}, tx.Save())
+			hint([]string{"esc"}, tx.Cancel())
+		} else if len(a.picked) > 1 {
 			a.batchHints(c, hint)
 		}
 		for i, h := range hints {
-			if len(a.picked) > 1 {
+			if editing || len(a.picked) > 1 {
 				break
 			}
 			if width < 900 && (i == 2 || i == 3 || i == 5) {

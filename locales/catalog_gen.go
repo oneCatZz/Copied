@@ -1313,3 +1313,53 @@ func Retry() string { return In(i18n.Locale()).Retry() }
 func (msgs Messages) Retry() string {
 	return Catalog.Format(msgs.locale, "retry", nil)
 }
+
+// Edit says "Edit"
+// in the language the app shows.
+func Edit() string { return In(i18n.Locale()).Edit() }
+
+// Edit says "Edit"
+// in the language of msgs.
+func (msgs Messages) Edit() string {
+	return Catalog.Format(msgs.locale, "edit", nil)
+}
+
+// DeleteAll says "Delete all"
+// in the language the app shows.
+func DeleteAll() string { return In(i18n.Locale()).DeleteAll() }
+
+// DeleteAll says "Delete all"
+// in the language of msgs.
+func (msgs Messages) DeleteAll() string {
+	return Catalog.Format(msgs.locale, "deleteAll", nil)
+}
+
+// DeleteClipsTitle says "{count, plural, one {Delete # item?} other {Delete # items?}}"
+// in the language the app shows.
+func DeleteClipsTitle(count int) string { return In(i18n.Locale()).DeleteClipsTitle(count) }
+
+// DeleteClipsTitle says "{count, plural, one {Delete # item?} other {Delete # items?}}"
+// in the language of msgs.
+func (msgs Messages) DeleteClipsTitle(count int) string {
+	return Catalog.Format(msgs.locale, "deleteClipsTitle", map[string]any{"count": count})
+}
+
+// DeleteClipsHint says "They will be removed from history and from every group. This cannot be undone."
+// in the language the app shows.
+func DeleteClipsHint() string { return In(i18n.Locale()).DeleteClipsHint() }
+
+// DeleteClipsHint says "They will be removed from history and from every group. This cannot be undone."
+// in the language of msgs.
+func (msgs Messages) DeleteClipsHint() string {
+	return Catalog.Format(msgs.locale, "deleteClipsHint", nil)
+}
+
+// EditFailed says "Could not save the changes."
+// in the language the app shows.
+func EditFailed() string { return In(i18n.Locale()).EditFailed() }
+
+// EditFailed says "Could not save the changes."
+// in the language of msgs.
+func (msgs Messages) EditFailed() string {
+	return Catalog.Format(msgs.locale, "editFailed", nil)
+}

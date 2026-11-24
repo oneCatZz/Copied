@@ -220,5 +220,56 @@ func (a *app) batchHints(c *ui.Context, hint func(keys []string, label string)) 
 	hint([]string{"↵"}, tx.PasteAll())
 	hint([]string{cmd, "↵"}, tx.CopyAll())
 	hint([]string{cmd, "S"}, tx.AddToStack())
+	hint([]string{cmd, "⌫"}, tx.DeleteAll())
 	hint([]string{"esc"}, tx.ClearSelection())
+}
+
+// askDeleteClips opens the dialog that asks whether to delete the clips
+// with IDs, which a single click must not take away.
+func (a *app) askDeleteClips(ids []int64) {
+	a.cardMenuID = 0
+	a.deleteIDs = slices.Clone(ids)
+	a.deleteOpen = true
+}
+
+// deleteClips deletes the clips the dialog asked about and lets the batch go.
+func (a *app) deleteClips() {
+	ids := a.deleteIDs
+	a.deleteOpen, a.deleteIDs = false, nil
+	if len(ids) == 0 {
+		return
+	}
+	if err := a.store.DeleteClips(ids); err != nil {
+		log.Print("deleting clips: ", err)
+	}
+	a.picked, a.pickRange = nil, nil
+	a.pruneStack()
+	a.reload()
+	a.input.Focus()
+}
+
+// deleteDialog asks whether to delete the clips picked together.
+func (a *app) deleteDialog(c *ui.Context) {
+	t, tx := c.Theme(), locales.In(c.Locale())
+	ui.DialogBase(c.Key("delete-clips"), &a.deleteOpen, func(backdrop, panel ui.Element) {
+		width, height := c.Size()
+		backdrop.Background(ui.RGBA(0, 0, 0, 0.4))
+		popupSurface(c, panel).Column().Padding(18).Radius(12).Width(360).MaxWidth(width - 32).MaxHeight(height - 24).Gap(12)
+		ui.Text(c, tx.DeleteClipsTitle(len(a.deleteIDs))).FontSize(16).FontWeight(650)
+		ui.Text(c, tx.DeleteClipsHint()).FontSize(12).TextColor(t.TextMuted)
+		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+			if dialogButton(c, "cancel-delete", tx.Cancel(), false).Clicked() {
+				a.deleteOpen = false
+			}
+			ui.Spacer(c)
+			button := dialogButton(c, "confirm-delete", tx.Delete(), true).Background(t.Danger)
+			if button.Clicked() {
+				a.deleteClips()
+			}
+		})
+	})
+	if !a.deleteOpen && a.deleteIDs != nil {
+		a.deleteIDs = nil // dismissed
+		a.input.Focus()
+	}
 }

@@ -127,5 +127,10 @@
   "updatesUnavailable": "当前位置无法自动更新",
   "updateReady": "新版本 {version} 已就绪",
   "restartNow": "立即重启",
-  "retry": "重试"
+  "retry": "重试",
+  "edit": "编辑",
+  "deleteAll": "批量删除",
+  "deleteClipsTitle": "删除所选的 {count} 项？",
+  "deleteClipsHint": "这些内容会从历史记录和所有分组中移除，且无法撤销。",
+  "editFailed": "保存失败。"
 }

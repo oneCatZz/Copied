@@ -70,6 +70,8 @@ type app struct {
 	sources       []string
 	chosen        int
 	picked        []int64 // clips picked to paste together, in the order picked
+	deleteIDs     []int64 // the picked clips the delete dialog asks about
+	deleteOpen    bool    // the dialog asks whether to delete them
 	pickRange     *pickRange
 	scrollTo      bool    // the chosen card scrolls into view in the next frame
 	input         ui.Handle
@@ -252,8 +254,14 @@ func (a *app) copyOnly(i int) {
 	}
 }
 
+// remove deletes card i, or asks whether to delete the clips picked with
+// it, when there are several.
 func (a *app) remove(i int) {
 	if i < 0 || i >= len(a.clips) {
+		return
+	}
+	if ids := a.batchIDs(i); ids != nil {
+		a.askDeleteClips(ids)
 		return
 	}
 	id := a.clips[i].ID
@@ -458,6 +466,7 @@ func (a *app) panelHidden(panel *mygo.Window) {
 	}
 	a.settingsOpen = false
 	a.dismissGroupUI()
+	a.deleteOpen, a.deleteIDs = false, nil
 	a.cardMenuID = 0
 	a.searchSession++
 	a.recordError = ""
