@@ -49,6 +49,7 @@ func (a *app) toggleTrayMenu() {
 		Content:    ui.View(a.trayMenuView),
 	})
 	a.trayFlyout = window
+	watchClicksElsewhere(a.closeTrayMenuElsewhere)
 	window.OnClosed(func() {
 		if a.trayFlyout == window {
 			a.trayFlyout = nil
@@ -61,6 +62,22 @@ func (a *app) closeTrayMenu() {
 	if a.trayFlyout != nil {
 		a.trayFlyout.Close()
 	}
+}
+
+// closeTrayMenuElsewhere closes the tray menu on a press in another app,
+// as on another app's menu bar icon. A press on Copied's own icon is left
+// to its click, which toggles the menu.
+func (a *app) closeTrayMenuElsewhere() {
+	if a.trayFlyout == nil {
+		return
+	}
+	if a.tray != nil {
+		p, r := mygo.Screen.CursorScreenPoint(), a.tray.Bounds()
+		if p.X >= r.X && p.Y >= r.Y && p.X < r.X+r.Width && p.Y < r.Y+r.Height {
+			return
+		}
+	}
+	a.closeTrayMenu()
 }
 
 func (a *app) trayMenuView(c *ui.Context) {

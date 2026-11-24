@@ -191,6 +191,29 @@ func restoreFront() {
 	})
 }
 
+var (
+	selAddGlobalMonitor = objc.RegisterName("addGlobalMonitorForEventsMatchingMask:handler:")
+	selRetain           = objc.RegisterName("retain")
+	clicksElsewhere     objc.ID
+)
+
+// watchClicksElsewhere calls fn on the main thread as the user presses a
+// mouse button in another app, a click on another app's menu bar icon too.
+// The tray's popover closes on clicks in the app and as it is deactivated,
+// but a click in the menu bar activates no other app. The monitor is made
+// once, for the app's life.
+func watchClicksElsewhere(fn func()) {
+	if clicksElsewhere != 0 {
+		return
+	}
+	const mask = 1<<1 | 1<<3 | 1<<25 // left, right and other mouse down
+	handler := objc.NewBlock(func(_ objc.Block, _ objc.ID) { fn() })
+	monitor := objc.ID(objc.GetClass("NSEvent")).Send(selAddGlobalMonitor, uint64(mask), uintptr(handler))
+	if monitor != 0 {
+		clicksElsewhere = monitor.Send(selRetain)
+	}
+}
+
 // frontmostPID returns the process of the app the user is in, or 0.
 func frontmostPID() int32 {
 	var pid int32

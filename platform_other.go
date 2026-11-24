@@ -24,6 +24,10 @@ func writeImageText(data []byte, _ string) error { return writeImage(data) }
 // hand.
 func pasteInto(uintptr) {}
 
+// watchClicksElsewhere is needed only where the tray's popover misses
+// clicks in other apps (macOS).
+func watchClicksElsewhere(func()) {}
+
 // activateForViewer and restoreFront are needed only where a pinch goes to
 // the app in front (macOS).
 func activateForViewer() {}
