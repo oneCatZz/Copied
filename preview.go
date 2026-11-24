@@ -41,6 +41,7 @@ type clipPreview struct {
 	viewing   bool   // the picture shows over the whole panel (imageViewer)
 	view      viewer // where it shows there
 	linkPress linkPress
+	editPress linkPress // a press in the preview that may click it into editing
 	previewBody
 
 	editing     bool      // the preview edits the clip's text (previewEditor)
@@ -429,6 +430,24 @@ func (a *app) autosaveEdit(c *ui.Context) {
 	c.Invalidate() // for the list to show it
 }
 
+// clickedToEdit reports whether ev ends a click in the preview that starts
+// editing it: the primary button pressed with no modifiers and let go in
+// place. A press that moved selects text instead, and Cmd with a click
+// opens a link.
+func (p *clipPreview) clickedToEdit(ev ui.InputEvent) bool {
+	press := &p.editPress
+	switch ev.Kind {
+	case ui.InputPointerDown:
+		*press = linkPress{active: ev.Button == 0 && ev.Mods == 0 && ev.Clicks == 1, x: ev.X, y: ev.Y}
+	case ui.InputPointerUp:
+		dx, dy := ev.X-press.x, ev.Y-press.y
+		clicked := press.active && ev.Button == 0 && !ev.Canceled && dx*dx+dy*dy <= 16
+		press.active = false
+		return clicked
+	}
+	return false
+}
+
 // editKey gives each editing of a clip its own editor.
 type editKey struct {
 	id      int64
@@ -471,6 +490,8 @@ func (a *app) detail(c *ui.Context) (action func()) {
 	textual := clip.Kind == KindText || clip.Kind == KindCode
 	editing := a.editing()
 	batch := a.batchIDs(i) != nil
+	// The whole text, once read, and when the preview shows it all.
+	canEdit := editable(clip.Kind) && !batch && p.loaded && !p.truncated
 
 	pane := ui.Column(c.Key("detail")).Grow(1).Basis(0).MinWidth(0)
 	paneSurface(c, pane).Children(func() {
@@ -490,8 +511,7 @@ func (a *app) detail(c *ui.Context) (action func()) {
 					a.input.Focus()
 				}
 			}
-			// The whole text, once read, and when the preview shows it all.
-			if editable(clip.Kind) && !batch && p.loaded && !p.truncated {
+			if canEdit {
 				if previewButton(c, "edit-clip", tx.Edit(), editing).Clicked() {
 					if editing {
 						action = a.finishEdit
@@ -514,6 +534,15 @@ func (a *app) detail(c *ui.Context) (action func()) {
 			if p.editFailed {
 				ui.Text(c, tx.EditFailed()).FontSize(11).TextColor(t.Danger).Padding(0, 16, 6, 16).SingleLine()
 			}
+		} else if canEdit {
+			// A click in the preview edits it; a drag still selects its text.
+			ui.Column(c.Key("click-to-edit")).Grow(1).Basis(0).MinHeight(0).
+				ObserveInput(func(ev ui.InputEvent) {
+					if p.clickedToEdit(ev) {
+						a.startEdit(clip)
+					}
+				}).
+				Children(func() { a.previewContent(c, clip, p, hue) })
 		} else {
 			a.previewContent(c, clip, p, hue)
 		}
