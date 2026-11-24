@@ -1,7 +1,7 @@
 {
   "name": "Copied",
   "identifier": "com.example.copied",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "out": "build",
   "macos": { "infoPlist": { "LSUIElement": true }, "entitlements": "macos.entitlements.plist" },
   "i18n": { "dir": "locales", "source": "en" },
