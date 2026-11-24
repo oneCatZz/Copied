@@ -6,7 +6,7 @@ Windows 和 macOS 上的剪贴板历史工具。在后台记录复制过的内�
 
 纯 Go 编写，基于 [MyGo](https://github.com/egoist/mygo) 的原生 UI，界面由 GPU 绘制，不使用 WebView。数据只保存在本地。
 
-<img src="docs/screenshots/panel.png" alt="Copied 主面板：左侧历史列表，右侧为选中代码的预览" width="800">
+<img src="docs/screenshots/panel-macos.png" alt="Copied 主面板：左侧历史列表，右侧为选中代码的预览" width="800">
 
 ## 安装
 
@@ -47,7 +47,7 @@ curl -fsSL https://github.com/oneCatZz/Copied/releases/latest/download/install.s
 
 全局快捷键默认为 `⌘⇧V`（Windows 为 `Ctrl+Shift+V`），可在设置中修改。
 
-<img src="docs/screenshots/settings.png" alt="设置对话框：快捷键、语言与版本更新" width="800">
+<img src="docs/screenshots/settings-macos.png" alt="设置对话框：快捷键、语言与版本更新" width="800">
 
 面板内（Windows 上 `⌘` 换成 `Ctrl`）：
 
@@ -72,7 +72,7 @@ curl -fsSL https://github.com/oneCatZz/Copied/releases/latest/download/install.s
 
 点击菜单栏图标（Windows 为通知区域图标）打开弹层，可以打开面板、修改设置、暂停记录、开关开机启动、清空历史（保留分组内容）和检查更新。
 
-<img src="docs/screenshots/tray.png" alt="菜单栏弹层" width="324">
+<img src="docs/screenshots/tray-macos.png" alt="菜单栏弹层" width="324">
 
 ## 自动更新
 
