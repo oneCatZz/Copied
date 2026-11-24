@@ -114,6 +114,9 @@ type app struct {
 
 	listScroll ui.ScrollState
 	preview    clipPreview // the whole text of the chosen clip, as it loads
+	// reloadAfterEdit lists the clips again in the next pass, after the
+	// preview left an edited clip for another.
+	reloadAfterEdit func()
 	codeWrap   bool        // the preview of code wraps its lines
 
 	target   uintptr      // the window the panel was shown over (Windows)
@@ -403,6 +406,7 @@ func (a *app) ready() {
 	a.registerShortcut()
 	a.setUpTray()
 	mygo.App.OnWillQuit(func(*mygo.QuitEvent) {
+		a.flushEdit(true) // what was typed, should the panel not have hidden
 		a.clearThumbs()
 		a.clearSourceIcons()
 		if a.tray != nil {
@@ -470,6 +474,10 @@ func (a *app) panelHidden(panel *mygo.Window) {
 	a.cardMenuID = 0
 	a.searchSession++
 	a.recordError = ""
+	if a.flushEdit(true) { // hiding keeps what was typed
+		a.pruneStack()
+	}
+	a.reloadAfterEdit = nil
 	a.clips, a.picked = nil, nil
 	a.preview.reset()
 	a.clearThumbs()

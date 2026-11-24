@@ -29,16 +29,23 @@ func TestStoreUpdateTextKeepsPlaceAndMergesDuplicates(t *testing.T) {
 	if err := s.SetGroupMember(second, defaultGroupID, true); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.UpdateText(first, "https://example.com/edited"); err != nil {
-		t.Fatal(err)
+	if saved, err := s.UpdateText(first, "https://example.com/edited", false); !saved || err != nil {
+		t.Fatal(saved, err)
 	}
 	clip, err := s.Get(first)
 	if err != nil || clip == nil || clip.Text != "https://example.com/edited" || clip.Kind != KindLink {
 		t.Fatalf("edited clip: %+v, %v", clip, err)
 	}
-	// Editing it to the text of another clip merges them, groups included.
-	if err := s.UpdateText(first, "second"); err != nil {
-		t.Fatal(err)
+	// Without merging, the text of another clip is not saved.
+	if saved, err := s.UpdateText(first, "second", false); saved || err != nil {
+		t.Fatalf("a duplicate saved without merging: %v, %v", saved, err)
+	}
+	if clips, _ := s.List(FilterAll, ""); len(clips) != 2 {
+		t.Fatalf("a clip went away without merging: %d", len(clips))
+	}
+	// Merging, the other clip gives way, its groups joining the edited one.
+	if saved, err := s.UpdateText(first, "second", true); !saved || err != nil {
+		t.Fatal(saved, err)
 	}
 	clips, err := s.List(FilterAll, "")
 	if err != nil || len(clips) != 1 || clips[0].ID != first || clips[0].Text != "second" || clips[0].Kind != KindText {
@@ -49,13 +56,23 @@ func TestStoreUpdateTextKeepsPlaceAndMergesDuplicates(t *testing.T) {
 	}
 }
 
-func TestPreviewEditsTextAndSaves(t *testing.T) {
-	a := editTestApp(t, "hello")
+func storedText(t *testing.T, a *app, id int64) string {
+	t.Helper()
+	clip, err := a.store.Get(id)
+	if err != nil || clip == nil {
+		t.Fatalf("clip %d: %+v, %v", id, clip, err)
+	}
+	return clip.Text
+}
+
+func TestPreviewEditSavesAutomatically(t *testing.T) {
+	a := editTestApp(t, "other", "hello")
 	tt := ui.NewTester(a.view, panelWidth, panelHeight)
+	id, other := a.clips[0].ID, a.clips[1].ID
 	if err := tt.Click("Edit"); err != nil {
 		t.Fatal(err)
 	}
-	if !a.editing() || a.preview.draft != "hello" || !tt.HasText("Save") {
+	if !a.editing() || a.preview.draft != "hello" || !tt.HasText("Changes save automatically") {
 		t.Fatalf("editing did not start: editing=%v, draft=%q", a.editing(), a.preview.draft)
 	}
 	// Keys go to the editor rather than to the list or the panel.
@@ -67,31 +84,49 @@ func TestPreviewEditsTextAndSaves(t *testing.T) {
 		t.Fatalf("typing did not reach the editor: %q", a.preview.draft)
 	}
 	saveUIArtifact(t, tt, "preview-editing")
-	tt.Key(ui.Cmd, ui.KeyS)
-	if a.editing() {
-		t.Fatal("Cmd+S did not leave the editor")
+	if storedText(t, a, id) != "hello" {
+		t.Fatal("saved before typing paused")
 	}
-	clip, err := a.store.Get(a.clips[0].ID)
-	if err != nil || clip == nil || clip.Text != "hello world\nagain" {
-		t.Fatalf("the edit was not saved: %+v, %v", clip, err)
+	tt.Advance(time.Second)
+	if got := storedText(t, a, id); got != "hello world\nagain" || !a.editing() {
+		t.Fatalf("a pause in typing did not save: %q, editing=%v", got, a.editing())
+	}
+	if !tt.HasText("hello world again") {
+		t.Fatal("the list did not show the saved text")
+	}
+
+	// A text passing by that another clip holds does not take it away.
+	tt.Key(ui.Cmd, ui.KeyA)
+	tt.Type("other")
+	tt.Advance(time.Second)
+	if storedText(t, a, id) != "hello world\nagain" || !a.store.Has(other) {
+		t.Fatal("typing the text of another clip merged them before the editing ended")
+	}
+	tt.Type(" edited")
+	tt.Advance(time.Second)
+
+	// Escape leaves the editor, keeping what was typed, and the panel shows.
+	tt.Type("!")
+	tt.Key(0, ui.KeyEscape)
+	if a.editing() || storedText(t, a, id) != "other edited!" {
+		t.Fatalf("Escape: editing=%v, text=%q", a.editing(), storedText(t, a, id))
 	}
 	tt.Frame()
-	if !tt.HasText("hello world") {
-		t.Fatal("the preview did not show the saved text")
-	}
 	saveUIArtifact(t, tt, "preview-saved")
 
-	// Escape forgets the draft without hiding the panel.
+	// Choosing another clip keeps what was typed in this one.
 	if err := tt.Click("Edit"); err != nil {
 		t.Fatal(err)
 	}
-	tt.Type("discarded")
-	tt.Key(0, ui.KeyEscape)
-	if a.editing() {
-		t.Fatal("Escape did not leave the editor")
+	tt.Type(" more")
+	a.choose(1)
+	tt.Frame()
+	tt.Frame()
+	if a.editing() || storedText(t, a, id) != "other edited! more" {
+		t.Fatalf("switching clips: editing=%v, text=%q", a.editing(), storedText(t, a, id))
 	}
-	if clip, _ := a.store.Get(a.clips[0].ID); clip.Text != "hello world\nagain" {
-		t.Fatalf("a cancelled edit was saved: %q", clip.Text)
+	if !tt.HasText("other edited! more") {
+		t.Fatal("the list did not show the text saved on switching")
 	}
 }
 

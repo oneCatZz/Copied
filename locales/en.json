@@ -132,5 +132,6 @@
   "deleteAll": "Delete all",
   "deleteClipsTitle": "{count, plural, one {Delete # item?} other {Delete # items?}}",
   "deleteClipsHint": "They will be removed from history and from every group. This cannot be undone.",
-  "editFailed": "Could not save the changes."
+  "editFailed": "Could not save the changes.",
+  "autoSave": "Changes save automatically"
 }

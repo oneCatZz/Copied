@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"copied/locales"
@@ -42,11 +43,24 @@ type clipPreview struct {
 	linkPress linkPress
 	previewBody
 
-	editing      bool   // the preview edits the clip's text (previewEditor)
-	editSession  uint64 // a fresh editor for each time it starts
-	draft        string // the text as edited
-	editOriginal string // the whole text when the editing started
-	editFailed   bool   // saving the draft failed
+	editing     bool      // the preview edits the clip's text (previewEditor)
+	editSession uint64    // a fresh editor for each time it starts
+	draft       string    // the text as edited
+	editSaved   string    // the clip's text, as last saved
+	editTyped   string    // the draft as last seen, to tell when typing pauses
+	editTypedAt time.Time // when it last changed
+	editBlocked string    // a draft that only a merge with another clip could save
+	editFailed  bool      // saving the draft failed
+}
+
+// editSaveDelay is how long typing pauses before the draft saves itself.
+const editSaveDelay = 600 * time.Millisecond
+
+// editDirty reports whether the draft differs from the text saved. An
+// empty draft is never saved: deleting is for the Delete button.
+func (p *clipPreview) editDirty() bool {
+	return p.editing && strings.TrimSpace(p.draft) != "" && p.draft != p.editSaved &&
+		p.draft != strings.ReplaceAll(p.editSaved, "\r\n", "\n")
 }
 
 type previewBody struct {
@@ -71,6 +85,12 @@ func (a *app) previewOf(clip *Clip) *clipPreview {
 	p := &a.preview
 	if p.id == clip.ID && p.gen != 0 {
 		return p
+	}
+	if p.editing && a.store != nil {
+		// Choosing another clip keeps what was typed in this one.
+		chosen := clip.ID
+		merged := a.flushEdit(true)
+		a.reloadAfterEdit = func() { a.reloadChoosing(chosen, merged) }
 	}
 	p.reset()
 	p.id = clip.ID
@@ -316,44 +336,86 @@ func (a *app) startEdit(clip *Clip) {
 		text = whole
 	}
 	p := a.previewOf(clip)
-	p.editing, p.draft, p.editOriginal, p.editFailed = true, text, text, false
+	p.editing, p.draft, p.editSaved, p.editTyped = true, text, text, text
+	p.editBlocked, p.editFailed = "", false
 	p.editSession++
 }
 
-// cancelEdit leaves the editor, forgetting the draft.
-func (a *app) cancelEdit() {
+// flushEdit saves the draft as the clip's text, when it changed, and
+// shows it in the list at once. Saving as typing pauses leaves alone
+// another clip holding the same text; saving as the editing ends (merge)
+// has that clip give way, and reports that the history needs reloading.
+func (a *app) flushEdit(merge bool) (merged bool) {
 	p := &a.preview
-	p.editing, p.draft, p.editOriginal, p.editFailed = false, "", "", false
+	if a.store == nil || !p.editDirty() || !merge && p.draft == p.editBlocked {
+		return false
+	}
+	saved, err := a.store.UpdateText(p.id, p.draft, merge)
+	if err != nil {
+		log.Print("saving clip: ", err)
+		p.editFailed = true
+		return false
+	}
+	if !saved {
+		p.editBlocked = p.draft
+		return false
+	}
+	p.editSaved, p.editBlocked, p.editFailed = p.draft, "", false
+	for _, clip := range a.clips {
+		if clip.ID == p.id {
+			clip.Kind, clip.Length = textKind(p.draft), utf8.RuneCountInString(p.draft)
+			clip.Text = p.draft
+			if runes := []rune(p.draft); len(runes) > previewRunes {
+				clip.Text = string(runes[:previewRunes]) // as Store.List cuts it
+			}
+		}
+	}
+	return merge
+}
+
+// finishEdit saves the draft and leaves the editor. Should saving fail,
+// the editor stays, with the draft.
+func (a *app) finishEdit() {
+	p := &a.preview
+	merged := a.flushEdit(true)
+	if p.editFailed {
+		return
+	}
+	id := p.id
+	a.preview.reset()
+	a.reloadChoosing(id, merged)
 	a.input.Focus()
 }
 
-// saveEdit keeps the draft as the clip's text and leaves the editor. An
-// empty draft is not saved: deleting is for the Delete button.
-func (a *app) saveEdit() {
-	if !a.editing() {
-		return
+// reloadChoosing lists the clips again with the clip with an ID still
+// chosen, after an edit saved; merged drops from the stack the clip that
+// gave way to the edited one.
+func (a *app) reloadChoosing(id int64, merged bool) {
+	if merged {
+		a.pruneStack()
 	}
-	p := &a.preview
-	id, text := p.id, p.draft
-	if strings.TrimSpace(text) == "" {
-		return
-	}
-	if text == p.editOriginal || text == strings.ReplaceAll(p.editOriginal, "\r\n", "\n") {
-		a.cancelEdit()
-		return
-	}
-	if err := a.store.UpdateText(id, text); err != nil {
-		log.Print("saving clip: ", err)
-		p.editFailed = true
-		return
-	}
-	a.pruneStack() // a clip holding the same text gave way
-	a.preview.reset()
 	a.reload()
 	if i := slices.IndexFunc(a.clips, func(c *Clip) bool { return c.ID == id }); i >= 0 {
 		a.chosen = i
 	}
-	a.input.Focus()
+}
+
+// autosaveEdit saves the draft once typing paused for editSaveDelay.
+func (a *app) autosaveEdit(c *ui.Context) {
+	p := &a.preview
+	now := c.Now()
+	if p.draft != p.editTyped {
+		p.editTyped, p.editTypedAt = p.draft, now
+	}
+	if !p.editDirty() || p.draft == p.editBlocked {
+		return
+	}
+	if wait := editSaveDelay - now.Sub(p.editTypedAt); wait > 0 {
+		c.After(wait)
+		return
+	}
+	a.flushEdit(false)
+	c.Invalidate() // for the list to show it
 }
 
 // editKey gives each editing of a clip its own editor.
@@ -391,6 +453,9 @@ func (a *app) detail(c *ui.Context) (action func()) {
 	t, tx := c.Theme(), locales.In(c.Locale())
 	i, clip := a.chosen, a.clips[a.chosen]
 	p := a.previewOf(clip)
+	if a.reloadAfterEdit != nil {
+		c.Invalidate() // the list, as the edit left it, in the next pass
+	}
 	hue := kindColor(clip.Kind, t.Dark)
 	textual := clip.Kind == KindText || clip.Kind == KindCode
 	editing := a.editing()
@@ -418,7 +483,7 @@ func (a *app) detail(c *ui.Context) (action func()) {
 			if editable(clip.Kind) && !batch && p.loaded && !p.truncated {
 				if previewButton(c, "edit-clip", tx.Edit(), editing).Clicked() {
 					if editing {
-						a.cancelEdit()
+						action = a.finishEdit
 					} else {
 						action = func() { a.startEdit(clip) }
 					}
@@ -434,6 +499,7 @@ func (a *app) detail(c *ui.Context) (action func()) {
 
 		if editing {
 			a.previewEditor(c, clip, p)
+			a.autosaveEdit(c)
 			if p.editFailed {
 				ui.Text(c, tx.EditFailed()).FontSize(11).TextColor(t.Danger).Padding(0, 16, 6, 16).SingleLine()
 			}
@@ -447,13 +513,10 @@ func (a *app) detail(c *ui.Context) (action func()) {
 		ui.Box(c).Height(1).Shrink(0).Background(t.Border)
 		ui.Row(c).Padding(10, 12).Gap(8).AlignItems(ui.Center).Children(func() {
 			if editing {
-				blank := strings.TrimSpace(p.draft) == ""
-				if dialogButton(c, "save-edit", tx.Save(), !blank).Clicked() && !blank {
-					action = a.saveEdit
+				if dialogButton(c, "finish-edit", tx.Done(), true).Clicked() {
+					action = a.finishEdit
 				}
-				if dialogButton(c, "cancel-edit", tx.Cancel(), false).Clicked() {
-					action = a.cancelEdit
-				}
+				ui.Text(c, tx.AutoSave()).FontSize(11.5).TextColor(t.TextMuted).SingleLine()
 				return
 			}
 			pasteLabel, copyLabel := tx.Paste(), tx.CopyOnly()

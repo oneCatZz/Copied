@@ -338,11 +338,20 @@ func (s *Store) DeleteClips(ids []int64) error {
 // UpdateText replaces the text of a clip edited in the preview. The clip
 // keeps its place and its groups, and takes the kind of its new text; the
 // formatting copied with the old text no longer matches and is dropped.
-// Another clip that already holds the new text gives way to it, its
-// groups joining the edited clip's.
-func (s *Store) UpdateText(id int64, text string) error {
+// Where another clip already holds the new text, merge has that clip give
+// way, its groups joining the edited clip's; without merge nothing is
+// saved, and it reports false, so that a text passing by as it is typed
+// does not take another clip away.
+func (s *Store) UpdateText(id int64, text string, merge bool) (bool, error) {
+	ctx := context.Background()
 	hash := hashOf(KindText, []byte(text))
-	_, err := s.db.Transaction(context.Background(), []sqlite.Statement{
+	if !merge {
+		rows, err := s.db.Query(ctx, `SELECT 1 FROM clips WHERE hash = ? AND id <> ?`, hash, id)
+		if err != nil || len(rows.Values) > 0 {
+			return false, err
+		}
+	}
+	_, err := s.db.Transaction(ctx, []sqlite.Statement{
 		{SQL: `INSERT OR IGNORE INTO clip_groups (clip_id, group_id)
 			SELECT ?, group_id FROM clip_groups WHERE clip_id IN (SELECT id FROM clips WHERE hash = ? AND id <> ?)`,
 			Args: []any{id, hash, id}},
@@ -351,7 +360,7 @@ func (s *Store) UpdateText(id int64, text string) error {
 			pinned = EXISTS (SELECT 1 FROM clip_groups WHERE clip_id = ? AND group_id = ?) WHERE id = ?`,
 			Args: []any{string(textKind(text)), text, utf8.RuneCountInString(text), hash, id, defaultGroupID, id}},
 	})
-	return err
+	return err == nil, err
 }
 
 // Clear keeps every clip organized into a group, including legacy favorites.

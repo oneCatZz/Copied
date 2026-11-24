@@ -169,16 +169,21 @@ func (a *app) view(c *ui.Context) {
 		c.Invalidate()
 	}
 
+	// A clip chosen while another was edited lists that one as it was saved.
+	if reload := a.reloadAfterEdit; reload != nil {
+		a.reloadAfterEdit = nil
+		reload()
+	}
+
 	// The keys the search field leaves, wherever the focus is.
 	dialogs := a.settingsOpen || a.groupDialogOpen || a.typeMenuOpen || a.groupMenuOpen || a.sourceMenuOpen || a.deleteOpen
 	if a.editing() && !dialogs {
-		// The editor in the preview has the keys, but for saving and leaving.
+		// The editor in the preview has the keys, but for leaving it, which
+		// saves what was typed.
 		save := c.Shortcut(ui.Cmd, ui.KeyS)
-		if c.Shortcut(ui.Cmd, ui.KeyEnter) || save {
-			a.saveEdit()
-		}
-		if c.Shortcut(0, ui.KeyEscape) {
-			a.cancelEdit()
+		enter := c.Shortcut(ui.Cmd, ui.KeyEnter)
+		if c.Shortcut(0, ui.KeyEscape) || save || enter {
+			a.finishEdit()
 		}
 	} else if !dialogs {
 		type combo struct {
@@ -652,8 +657,7 @@ func (a *app) footer(c *ui.Context) {
 	ui.Row(c).Padding(0, 22, 16, 22).Gap(18).AlignItems(ui.Center).Children(func() {
 		editing := a.editing()
 		if editing {
-			hint([]string{cmd, "S"}, tx.Save())
-			hint([]string{"esc"}, tx.Cancel())
+			hint([]string{"esc"}, tx.Done())
 		} else if len(a.picked) > 1 {
 			a.batchHints(c, hint)
 		}

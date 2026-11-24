@@ -1363,3 +1363,13 @@ func EditFailed() string { return In(i18n.Locale()).EditFailed() }
 func (msgs Messages) EditFailed() string {
 	return Catalog.Format(msgs.locale, "editFailed", nil)
 }
+
+// AutoSave says "Changes save automatically"
+// in the language the app shows.
+func AutoSave() string { return In(i18n.Locale()).AutoSave() }
+
+// AutoSave says "Changes save automatically"
+// in the language of msgs.
+func (msgs Messages) AutoSave() string {
+	return Catalog.Format(msgs.locale, "autoSave", nil)
+}
