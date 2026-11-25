@@ -113,3 +113,7 @@ go test ./...
 ## 许可
 
 [MIT](LICENSE)
+
+## 致谢
+
+感谢 [Linux DO](https://linux.do) 社区的支持。
